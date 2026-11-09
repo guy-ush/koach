@@ -203,7 +203,7 @@ function renderHome() {
   const n = db.workouts.length, last = sortedWorkouts()[0];
   view.innerHTML = `
     <div class="top"><div class="brand"><img src="icons/logo.png" alt="ZONE Strength Club"><div><h1>יומן כוח</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div></div>
-    ${storageWarning()}${transferCard()}${installCard()}
+    ${storageWarning()}${transferCard() || installCard()}
     <div class="lifts">${lifts().map(l => {
       // each lift shows the RM it actually tracks; others it also has go underneath
       const av = availBases(l.id), main = av[0] || RMS()[0], rest = av.slice(1);
@@ -879,7 +879,7 @@ function pasteTransfer() {
 function transferCard() {
   if (!isIOS()) return '';
   if (standalone() && !hasData(db)) return `<div class="card install"><div class="grow"><b>רשמת כבר נתונים בספארי?</b><p class="muted small">באייפון, האפליקציה במסך הבית שומרת בנפרד מספארי. אפשר להעביר אותם לכאן פעם אחת.</p></div><div class="col"><button class="btn sm primary" data-paste>העברה</button></div></div>`;
-  if (!standalone() && hasData(db) && !db.settings.transferDismissed) return `<div class="card install"><div class="grow"><b>מתקין למסך הבית?</b><p class="muted small">שם הנתונים נשמרים בנפרד. העתק אותם עכשיו, ואחרי ההתקנה לחץ „העברה” באפליקציה.</p></div><div class="col"><button class="btn sm primary" data-copy>העתקה</button><button class="icon-btn" data-tdismiss aria-label="סגירה">${ICON.x}</button></div></div>`;
+  if (!standalone() && hasData(db) && !db.settings.transferDismissed) return `<div class="card install"><div class="grow"><b>להתקין על הטלפון</b><p class="muted small">${installHow()}<br>באייפון האפליקציה במסך הבית שומרת בנפרד מספארי: לחץ „העתקה” לפני ההתקנה, ואחריה „העברה” באפליקציה.</p></div><div class="col"><button class="btn sm primary" data-copy>העתקה</button><button class="icon-btn" data-tdismiss aria-label="סגירה">${ICON.x}</button></div></div>`;
   return '';
 }
 function bindTransfer() {
