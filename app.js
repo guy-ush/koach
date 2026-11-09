@@ -1063,13 +1063,35 @@ checkStorage();
       el.animate(frames, { duration: T * 1000, easing: 'linear', fill: 'forwards' });
     }
   };
+  // the logo drops from the top onto the kettlebell's body, like a stamp; the name stays up top
+  const stamp = () => {
+    const logo = $('.sp-logo', sp), kb = $('.sp-kb', sp);
+    const a = logo.getBoundingClientRect(), k = kb.getBoundingClientRect();
+    const size = k.width * .56, tx = k.left + k.width / 2, ty = k.top + k.height * .64; // centre of the bell
+    const dx = tx - (a.left + a.width / 2), dy = ty - (a.top + a.height / 2), sc = size / a.width;
+    logo.animate([
+      { transform: 'none', filter: 'drop-shadow(0 10px 30px rgba(0,0,0,.6))' },
+      { transform: `translate(${dx * .15}px,${dy * .05 - 14}px) scale(1.04)`, offset: .25 },
+      { transform: `translate(${dx}px,${dy}px) scale(${sc * 1.12})`, offset: .82, filter: 'drop-shadow(0 18px 18px rgba(0,0,0,.7))' },
+      { transform: `translate(${dx}px,${dy}px) scale(${sc})`, filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.8)) brightness(.9) contrast(1.05)' }
+    ], { duration: 750, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' });
+    setTimeout(() => {
+      // curved-surface shading over the stamped logo so it sits on the iron ball
+      const sh = document.createElement('div'); sh.className = 'sp-shade';
+      sh.style.cssText = `left:${tx - size / 2}px;top:${ty - size / 2}px;width:${size}px;height:${size}px`;
+      sp.appendChild(sh); sh.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250, fill: 'forwards' });
+      kb.animate([{ transform: 'translateY(5px) scale(1)' }, { transform: 'translateY(8px) scale(1.02,.97)' }, { transform: 'translateY(5px) scale(1)' }], { duration: 220, easing: 'ease-out' });
+      sp.animate([{ transform: 'translateY(5px)' }, { transform: 'translateY(-3px)' }, { transform: 'none' }], { duration: 260, easing: 'ease-out' });
+      try { navigator.vibrate && navigator.vibrate(30); } catch (e) { /* ignore */ }
+    }, 750);
+  };
   // the impact happens exactly when the fall animation ends; everything after is timed from there
   const timers = [];
   let hit = false;
   const impact = () => {
     if (hit) return; hit = true;
     sp.classList.add('hit'); debris(); try { navigator.vibrate && navigator.vibrate([70, 40, 30]); } catch (e) { /* ignore */ }
-    timers.push(setTimeout(() => sp.classList.add('logo'), 1200), setTimeout(() => sp.classList.add('out'), 3400), setTimeout(() => sp.remove(), 4000));
+    timers.push(setTimeout(() => sp.classList.add('logo'), 1200), setTimeout(stamp, 2300), setTimeout(() => sp.classList.add('out'), 4300), setTimeout(() => sp.remove(), 4900));
   };
   $('.sp-kb', sp).addEventListener('animationend', e => { if (e.animationName === 'spFall') impact(); });
   timers.push(setTimeout(impact, 2500)); // safety net if the animation event never fires
