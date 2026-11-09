@@ -925,9 +925,9 @@ function applyTheme() {
   let seen = false; try { seen = !!sessionStorage.getItem('koach.splash'); sessionStorage.setItem('koach.splash', '1'); } catch (e) { /* private mode */ }
   if (seen || matchMedia('(prefers-reduced-motion: reduce)').matches) return sp.remove();
   const timers = [
-    setTimeout(() => { sp.classList.add('shake'); try { navigator.vibrate && navigator.vibrate([40, 30, 25]); } catch (e) { /* ignore */ } }, 750),
-    setTimeout(() => sp.classList.add('out'), 2300),
-    setTimeout(() => sp.remove(), 2800)
+    setTimeout(() => { sp.classList.add('shake'); try { navigator.vibrate && navigator.vibrate([40, 30, 25]); } catch (e) { /* ignore */ } }, 1950),
+    setTimeout(() => sp.classList.add('out'), 4700),
+    setTimeout(() => sp.remove(), 5300)
   ];
   sp.onclick = () => { timers.forEach(clearTimeout); sp.classList.add('out'); setTimeout(() => sp.remove(), 450); };
 })();
