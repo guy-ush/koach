@@ -1036,12 +1036,44 @@ checkStorage();
 (() => {
   const sp = $('#splash'); if (!sp) return;
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return sp.remove();
-  const timers = [
-    setTimeout(() => { sp.classList.add('shake'); try { navigator.vibrate && navigator.vibrate([40, 30, 25]); } catch (e) { /* ignore */ } }, 1950),
-    setTimeout(() => sp.classList.add('out'), 4700),
-    setTimeout(() => sp.remove(), 5300)
-  ];
-  sp.onclick = () => { timers.forEach(clearTimeout); sp.classList.add('out'); setTimeout(() => sp.remove(), 450); };
+  // cracks: jagged lines radiating from the impact, flattened onto the floor plane
+  let r = 2166136261 ^ Date.now(); const rnd = () => ((r = Math.imul(r ^ (r >>> 15), 2246822507) ^ Math.imul(r ^ (r >>> 13), 3266489909)) >>> 0) / 4294967296;
+  const cx = 200, cy = 80, flat = 0.36, paths = [];
+  const crack = (x, y, ang, len, w, depth, wait) => {
+    let d = `M${x.toFixed(1)} ${y.toFixed(1)}`, px = x, py = y, a = ang;
+    const steps = 5 + (rnd() * 4 | 0);
+    for (let i = 0; i < steps; i++) {
+      a += (rnd() - .5) * .9; const l = len / steps * (.6 + rnd() * .8);
+      px += Math.cos(a) * l; py += Math.sin(a) * l * flat; d += ` L${px.toFixed(1)} ${py.toFixed(1)}`;
+      if (depth < 2 && rnd() < .35) crack(px, py, a + (rnd() < .5 ? -1 : 1) * (.5 + rnd() * .7), len * (.35 + rnd() * .3), w * .55, depth + 1, wait + .05 + i * .025);
+    }
+    paths.push({ d, w, dur: .22 + len / 900, wait });
+  };
+  const n = 9 + (rnd() * 4 | 0);
+  for (let i = 0; i < n; i++) { const ang = Math.PI * 2 * i / n + (rnd() - .5) * .5; crack(cx + Math.cos(ang) * 24, cy + Math.sin(ang) * 24 * flat, ang, 90 + rnd() * 110, 2.6 + rnd() * 1.6, 0, rnd() * .06); }
+  $('.sp-cracks', sp).innerHTML = paths.map(p => `<path class="h" pathLength="1" d="${p.d}" stroke-width="${(p.w * .5).toFixed(2)}" style="--d:${p.dur.toFixed(2)}s;--w:${p.wait.toFixed(2)}s"/><path class="c" pathLength="1" d="${p.d}" stroke-width="${p.w.toFixed(2)}" style="--d:${p.dur.toFixed(2)}s;--w:${p.wait.toFixed(2)}s"/>`).join('');
+  const debris = () => {
+    const box = $('.sp-debris', sp), H = innerHeight;
+    for (let i = 0; i < 26; i++) {
+      const el = document.createElement('i'), s = 2 + rnd() * 5, g = 100 + rnd() * 70 | 0;
+      el.style.cssText = `width:${s}px;height:${s * (.6 + rnd() * .8)}px;background:rgb(${g},${g - 6},${g - 14})`;
+      box.appendChild(el);
+      const vx = (rnd() - .5) * 340, vy = -(160 + rnd() * 320), T = .9 + rnd() * .5, frames = [];
+      for (let k = 0; k <= 12; k++) { const t = T * k / 12, y = Math.min(vy * t + 900 * t * t, H * .02 + rnd() * 10); frames.push({ transform: `translate(${(vx * t).toFixed(1)}px,${y.toFixed(1)}px) rotate(${(k * 60 * (rnd() < .5 ? -1 : 1)) | 0}deg)`, opacity: k > 9 ? 1 - (k - 9) / 3 : 1 }); }
+      el.animate(frames, { duration: T * 1000, easing: 'linear', fill: 'forwards' });
+    }
+  };
+  // the impact happens exactly when the fall animation ends; everything after is timed from there
+  const timers = [];
+  let hit = false;
+  const impact = () => {
+    if (hit) return; hit = true;
+    sp.classList.add('hit'); debris(); try { navigator.vibrate && navigator.vibrate([70, 40, 30]); } catch (e) { /* ignore */ }
+    timers.push(setTimeout(() => sp.classList.add('logo'), 1200), setTimeout(() => sp.classList.add('out'), 3400), setTimeout(() => sp.remove(), 4000));
+  };
+  $('.sp-kb', sp).addEventListener('animationend', e => { if (e.animationName === 'spFall') impact(); });
+  timers.push(setTimeout(impact, 2500)); // safety net if the animation event never fires
+  sp.onclick = () => { timers.forEach(clearTimeout); sp.classList.add('out'); setTimeout(() => sp.remove(), 600); };
 })();
 applyTheme();
 route();
