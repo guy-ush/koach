@@ -13,7 +13,7 @@ const DEFAULT_LIFTS = [
   { id: 'bench', name: 'בנץ׳ פרס', color: 'var(--bench)' }
 ];
 const EXTRA_COLORS = ['var(--c5)', 'var(--c6)', 'var(--c7)', 'var(--c8)', 'var(--c9)', 'var(--c10)'];
-const DEFAULTS = { round: 2.5, theme: 'auto', lastBackup: null, rmTypes: [1, 5], lifts: null, installDismissed: false,
+const DEFAULTS = { round: 2.5, theme: 'auto', lastBackup: null, rmTypes: [1, 5, 10], lifts: null, installDismissed: false,
   drive: { on: false, fileId: null, lastAt: null, lastHash: null, error: null } };
 
 /* ---------- storage ---------- */
@@ -22,7 +22,9 @@ function normalize(d) {
   const settings = { ...DEFAULTS, ...(d.settings || {}) };
   settings.drive = { ...DEFAULTS.drive, ...(settings.drive || {}) };
   if (!Array.isArray(settings.lifts) || !settings.lifts.length) settings.lifts = DEFAULT_LIFTS.map(l => ({ ...l }));
-  if (!Array.isArray(settings.rmTypes) || !settings.rmTypes.length) settings.rmTypes = [1, 5];
+  if (!Array.isArray(settings.rmTypes) || !settings.rmTypes.length) settings.rmTypes = [1, 5, 10];
+  // 10RM became a default later: add it once for existing users (stays removed if they remove it)
+  if (!settings.rm10) { if (!settings.rmTypes.map(Number).includes(10)) settings.rmTypes = [...settings.rmTypes, 10]; settings.rm10 = true; }
   settings.rmTypes = [...new Set(settings.rmTypes.map(Number))].sort((a, b) => a - b);
   const workouts = (d.workouts || []).map(w => ({ ...w, items: (w.items || []).map(i => ({ base: 1, ...i })) }));
   return { tests: d.tests || [], workouts, settings };
