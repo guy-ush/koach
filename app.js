@@ -408,7 +408,7 @@ function renderEditor(id) {
     <div class="stack">
       <label class="field"><span>תאריך</span><input class="input" type="date" id="w-date" value="${d.date}"></label>
       <div id="items" class="stack"></div>
-      <div class="addex" id="addex"></div>
+      <div class="card addex-card"><h3 id="addex-title"></h3><div class="addex" id="addex"></div></div>
       <label class="field"><span>הערות</span><textarea class="input" id="w-note" placeholder="איך הרגיש, RPE, כאבים...">${esc(d.note)}</textarea></label>
     </div>
     <div class="save-bar"><button class="btn primary block" data-save>שמירת אימון</button></div>`;
@@ -444,8 +444,23 @@ function drawItems() {
       <div class="ex-foot"><button class="btn sm" data-addset>${ICON.plus} סט</button>${it.sets.length ? '<button class="btn sm ghost" data-dupset>שכפל אחרון</button>' : ''}</div>
     </div>`;
   }).join('');
-  const used = new Set(d.items.map(i => i.lift));
-  $('#addex').innerHTML = lifts().filter(l => !used.has(l.id)).map(l => `<button data-addex="${l.id}" style="--lc:${l.color}"><i class="dot"></i>${esc(l.name)}</button>`).join('');
+  // every exercise stays available (the same one can be added twice, e.g. heavy + back-off sets)
+  const count = id => d.items.filter(i => i.lift === id).length;
+  $('#addex-title').textContent = d.items.length ? 'הוספת תרגיל נוסף' : 'אילו תרגילים באימון? אפשר לבחור כמה';
+  $('#addex').innerHTML = lifts().map(l => `<button data-addex="${l.id}" style="--lc:${l.color}" class="${count(l.id) ? 'on' : ''}"><i class="dot"></i>${esc(l.name)}${count(l.id) ? ` <b>✓${count(l.id) > 1 ? count(l.id) : ''}</b>` : ''}</button>`).join('')
+    + `<button data-newex>${ICON.plus} תרגיל אחר</button>`;
+  $('[data-newex]').onclick = () => {
+    const s = sheet('תרגיל חדש', `<label class="field"><span>שם התרגיל</span><input class="input" id="nx" placeholder="למשל: מתח, חתירה, פרונט סקוואט"></label>
+      <p class="note" style="margin-top:8px">התרגיל יישמר ברשימה ויופיע גם באימונים הבאים.</p>`, '<button class="btn primary block" data-ok>הוספה לאימון</button>');
+    setTimeout(() => $('#nx', s.el).focus(), 320);
+    $('[data-ok]', s.el).onclick = () => {
+      const name = $('#nx', s.el).value.trim(); if (!name) return toast('צריך שם לתרגיל');
+      const usedC = new Set(db.settings.lifts.map(x => x.color)), id = 'x' + uid();
+      db.settings.lifts.push({ id, name, color: EXTRA_COLORS.find(c => !usedC.has(c)) || EXTRA_COLORS[db.settings.lifts.length % EXTRA_COLORS.length] });
+      save(); s.close();
+      d.items.push({ lift: id, base: null, sets: [{ reps: 8, pct: null, weight: null }] }); drawItems();
+    };
+  };
   $$('[data-addex]').forEach(b => b.onclick = () => {
     const lift = b.dataset.addex, av = availBases(lift);
     const add = base => {
@@ -520,6 +535,11 @@ function saveDraft() {
   // resolve % to kg at save time so history stays fixed even when the RM changes later
   const items = d.items.map(i => ({ lift: i.lift, base: i.base || null, sets: i.sets.map(s => ({ reps: s.reps, pct: s.pct ?? null, weight: setWeight(s, i.lift, d.date, i.base) })).filter(s => s.reps > 0 && s.weight > 0) })).filter(i => i.sets.length);
   if (!items.length) return toast('צריך לפחות סט אחד עם חזרות ומשקל');
+  const empty = d.items.filter(i => !i.sets.some(s => s.reps > 0 && setWeight(s, i.lift, d.date, i.base) > 0)).map(i => LIFT(i.lift).name);
+  if (empty.length && !d.confirmedEmpty) {
+    d.confirmedEmpty = true;
+    return toast(`חסר משקל ב: ${empty.join(', ')}. לחץ שוב לשמירה בלעדיהם`);
+  }
   const rec = { id: d.id || uid(), created: d.created || Date.now(), date: d.date, note: (d.note || '').trim(), items };
   if (d.id) db.workouts = db.workouts.map(w => w.id === d.id ? rec : w); else db.workouts.push(rec);
   save(); drive.auto(true);

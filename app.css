@@ -241,3 +241,9 @@ textarea.input{min-height:76px;resize:vertical}
 .toggle span::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.2s}
 .toggle input:checked+span{background:var(--accent)}
 .toggle input:checked+span::after{inset-inline-start:23px}
+.addex-card{display:flex;flex-direction:column;gap:10px;border:1px dashed var(--line);box-shadow:none;background:transparent}
+.addex-card h3{font-size:14.5px;color:var(--muted);font-weight:500}
+.addex button{background:var(--surface);border-style:solid}
+.addex button.on{border-color:var(--lc);background:color-mix(in srgb,var(--lc) 10%,var(--surface))}
+.addex button b{color:var(--lc);font-weight:500}
+.addex button svg{width:16px;height:16px}
