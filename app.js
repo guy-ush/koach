@@ -155,7 +155,7 @@ function spark(points) {
 function renderHome() {
   const n = db.workouts.length, last = sortedWorkouts()[0];
   view.innerHTML = `
-    <div class="top"><div><h1>יומן כוח</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div>
+    <div class="top"><div class="brand"><img src="icons/logo.svg" alt="ZONE Strength Club"><div><h1>יומן כוח</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div></div>
     ${installCard()}
     <div class="lifts">${lifts().map(l => {
       // each lift shows the RM it actually tracks; others it also has go underneath
@@ -919,6 +919,18 @@ function applyTheme() {
 }
 
 /* ---------- boot ---------- */
+// opening animation: once per launch, tap to skip
+(() => {
+  const sp = $('#splash'); if (!sp) return;
+  let seen = false; try { seen = !!sessionStorage.getItem('koach.splash'); sessionStorage.setItem('koach.splash', '1'); } catch (e) { /* private mode */ }
+  if (seen || matchMedia('(prefers-reduced-motion: reduce)').matches) return sp.remove();
+  const timers = [
+    setTimeout(() => { sp.classList.add('shake'); try { navigator.vibrate && navigator.vibrate([40, 30, 25]); } catch (e) { /* ignore */ } }, 750),
+    setTimeout(() => sp.classList.add('out'), 2300),
+    setTimeout(() => sp.remove(), 2800)
+  ];
+  sp.onclick = () => { timers.forEach(clearTimeout); sp.classList.add('out'); setTimeout(() => sp.remove(), 450); };
+})();
 applyTheme();
 route();
 snapshot();

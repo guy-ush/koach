@@ -1,8 +1,8 @@
 // Offline shell for יומן כוח. Bump VERSION whenever app files change.
-const VERSION = 'koach-v6';
+const VERSION = 'koach-v7';
 const SHELL = [
   './', 'index.html', 'app.css', 'app.js', 'config.js', 'manifest.webmanifest',
-  'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
+  'icons/icon.svg', 'icons/logo.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
   'fonts/fonts.css',
   'fonts/heebo-hebrew-300-normal.woff2', 'fonts/heebo-hebrew-400-normal.woff2', 'fonts/heebo-hebrew-500-normal.woff2',
   'fonts/heebo-latin-400-normal.woff2', 'fonts/heebo-latin-500-normal.woff2'
