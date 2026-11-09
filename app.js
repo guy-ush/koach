@@ -35,6 +35,51 @@ function save() {
   try { localStorage.setItem(KEY, JSON.stringify(db)); }
   catch (e) { toast('השמירה נכשלה — כדאי לגבות עכשיו'); }
   snapshot();
+  mirror.put(db);
+}
+// Second copy in IndexedDB: if localStorage is wiped but IndexedDB survives, data comes back.
+const mirror = (() => {
+  const open = () => new Promise((res, rej) => {
+    const r = indexedDB.open('koach', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  const tx = (mode, fn) => open().then(d => new Promise((res, rej) => {
+    const t = d.transaction('kv', mode), q = fn(t.objectStore('kv'));
+    t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error);
+  }));
+  return {
+    put: data => { try { tx('readwrite', st => st.put(JSON.stringify(data), 'db')).catch(() => {}); } catch (e) { /* no idb */ } },
+    get: () => { try { return tx('readonly', st => st.get('db')).then(v => v ? JSON.parse(v) : null).catch(() => null); } catch (e) { return Promise.resolve(null); } }
+  };
+})();
+const hasData = d => d && ((d.tests || []).length || (d.workouts || []).length);
+async function recoverIfWiped() {
+  if (hasData(db)) { mirror.put(db); return; }
+  let src = await mirror.get();
+  if (!hasData(src)) { const s = snaps()[0]; if (s) src = { ...s.data, settings: db.settings }; }
+  if (!hasData(src)) return;
+  db = normalize(src); try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* ignore */ }
+  toast(`הנתונים שוחזרו (${db.workouts.length} אימונים, ${db.tests.length} RM)`); route();
+}
+// Places where the browser throws data away on close: in-app browsers and private tabs.
+const inAppBrowser = () => /FBAN|FBAV|Instagram|WhatsApp|Line\/|Telegram|Snapchat|; wv\)|GSA\/|Claude/i.test(navigator.userAgent);
+let storageRisk = null; // null = unknown, '' = fine, else a reason
+async function checkStorage() {
+  let persisted = false;
+  try { if (navigator.storage && navigator.storage.persist) persisted = await navigator.storage.persisted() || await navigator.storage.persist(); } catch (e) { /* ignore */ }
+  let quota = Infinity;
+  try { if (navigator.storage && navigator.storage.estimate) quota = (await navigator.storage.estimate()).quota || Infinity; } catch (e) { /* ignore */ }
+  storageRisk = inAppBrowser() ? 'inapp' : quota < 150 * 1024 * 1024 && !standalone() ? 'private' : '';
+  db.settings._persisted = persisted;
+  if (storageRisk && /^#\/(home|settings)|^$/.test(location.hash)) route();
+}
+function storageWarning() {
+  if (!storageRisk) return '';
+  const why = storageRisk === 'inapp'
+    ? 'האפליקציה פתוחה בתוך דפדפן של אפליקציה אחרת (וואטסאפ, אינסטגרם וכו׳). שם הנתונים נמחקים כשסוגרים.'
+    : 'נראה שזו לשונית גלישה פרטית. בה הנתונים נמחקים כשסוגרים.';
+  return `<div class="card warn"><b>⚠️ הנתונים כאן לא יישמרו</b><p class="small">${why}<br>פתח את הקישור ב${isIOS() ? 'ספארי' : 'כרום'} רגיל והוסף למסך הבית.</p></div>`;
 }
 const lifts = () => db.settings.lifts.filter(l => !l.hidden);
 const LIFT = id => db.settings.lifts.find(l => l.id === id) || { id, name: id, color: 'var(--muted)' };
@@ -156,7 +201,7 @@ function renderHome() {
   const n = db.workouts.length, last = sortedWorkouts()[0];
   view.innerHTML = `
     <div class="top"><div class="brand"><img src="icons/logo.png" alt="ZONE Strength Club"><div><h1>יומן כוח</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div></div>
-    ${installCard()}
+    ${storageWarning()}${installCard()}
     <div class="lifts">${lifts().map(l => {
       // each lift shows the RM it actually tracks; others it also has go underneath
       const av = availBases(l.id), main = av[0] || RMS()[0], rest = av.slice(1);
@@ -919,6 +964,8 @@ function applyTheme() {
 }
 
 /* ---------- boot ---------- */
+recoverIfWiped();
+checkStorage();
 // opening animation on every open; tap to skip
 (() => {
   const sp = $('#splash'); if (!sp) return;

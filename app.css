@@ -282,3 +282,5 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .sp-name{position:absolute;left:0;right:0;top:calc(50% + min(70vw,300px)*.5 + 26px);text-align:center;color:#ECE9E1;font-family:"Frank Ruhl Libre",Heebo,serif;font-size:30px;opacity:0;transform:translateY(10px);animation:spName .7s ease-out 3.3s forwards}
 .sp-name small{display:block;font-family:Heebo,sans-serif;font-size:13px;letter-spacing:.2em;color:#9A9A9A;margin-top:4px}
 @keyframes spName{to{opacity:1;transform:none}}
+.card.warn{border:1.5px solid var(--over);background:color-mix(in srgb,var(--over) 8%,var(--surface));margin-bottom:14px}
+.card.warn p{margin-top:4px;color:var(--ink)}
