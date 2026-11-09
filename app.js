@@ -1047,5 +1047,29 @@ applyTheme();
 route();
 snapshot();
 drive.boot();
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+// Updates: a new version installs in the background; when it takes over, offer a one-tap reload.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  const hadController = !!navigator.serviceWorker.controller; // false on the very first visit
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // look for a new version whenever the app comes back to the screen (at most every 10 minutes)
+    let last = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && Date.now() - last > 10 * 60e3) { last = Date.now(); reg.update().catch(() => {}); }
+    });
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) showUpdateBar(); });
+}
+function showUpdateBar() {
+  if ($('#update-bar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'update-bar'; bar.setAttribute('role', 'status');
+  bar.innerHTML = `<span class="grow"><b>יש גרסה חדשה</b><small>הנתונים שלך נשמרים</small></span><button class="btn sm primary" data-upd>עדכון</button><button class="icon-btn" data-later aria-label="אחר כך">${ICON.x}</button>`;
+  document.body.appendChild(bar);
+  requestAnimationFrame(() => bar.classList.add('show'));
+  $('[data-upd]', bar).onclick = async () => {
+    if (draft && draft.items && draft.items.length && !await confirmBox('יש אימון שלא נשמר. לעדכן בכל זאת?', 'עדכון', false)) return;
+    location.reload();
+  };
+  $('[data-later]', bar).onclick = () => { bar.classList.remove('show'); setTimeout(() => bar.remove(), 300); };
+}
 })();

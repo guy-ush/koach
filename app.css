@@ -284,3 +284,7 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 @keyframes spName{to{opacity:1;transform:none}}
 .card.warn{border:1.5px solid var(--over);background:color-mix(in srgb,var(--over) 8%,var(--surface));margin-bottom:14px}
 .card.warn p{margin-top:4px;color:var(--ink)}
+#update-bar{position:fixed;z-index:70;inset-inline:12px;top:calc(env(safe-area-inset-top) + 10px);max-width:536px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:10px 10px 10px 14px;padding-inline-start:16px;border-radius:16px;background:var(--surface);box-shadow:0 10px 30px rgba(0,0,0,.18);border:1px solid var(--line);transform:translateY(-140%);transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+#update-bar.show{transform:none}
+#update-bar b{display:block;font-weight:500}
+#update-bar small{display:block;font-size:12.5px;color:var(--muted)}

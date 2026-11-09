@@ -1,5 +1,5 @@
 // Offline shell for יומן כוח. Bump VERSION whenever app files change.
-const VERSION = 'koach-v13';
+const VERSION = 'koach-v14';
 const SHELL = [
   './', 'index.html', 'app.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/logo.png', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
@@ -9,7 +9,8 @@ const SHELL = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the HTTP cache so a new version really downloads fresh files
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
