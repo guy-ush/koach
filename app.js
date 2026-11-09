@@ -919,11 +919,10 @@ function applyTheme() {
 }
 
 /* ---------- boot ---------- */
-// opening animation: once per launch, tap to skip
+// opening animation on every open; tap to skip
 (() => {
   const sp = $('#splash'); if (!sp) return;
-  let seen = false; try { seen = !!sessionStorage.getItem('koach.splash'); sessionStorage.setItem('koach.splash', '1'); } catch (e) { /* private mode */ }
-  if (seen || matchMedia('(prefers-reduced-motion: reduce)').matches) return sp.remove();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return sp.remove();
   const timers = [
     setTimeout(() => { sp.classList.add('shake'); try { navigator.vibrate && navigator.vibrate([40, 30, 25]); } catch (e) { /* ignore */ } }, 1950),
     setTimeout(() => sp.classList.add('out'), 4700),
