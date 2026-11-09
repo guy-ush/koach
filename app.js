@@ -406,27 +406,43 @@ function liftSeries(id, m, from) {
 }
 function renderProgress() {
   if (!metric) metric = db.tests.length ? 'rm' : 'top';
-  const from = rangeFrom(), M = METRICS.find(x => x[0] === metric);
-  const cards = lifts().map(l => ({ l, layers: liftSeries(l.id, metric, from) })).filter(c => c.layers.some(x => x.pts.length));
   view.innerHTML = `
-    <div class="top"><div><h1>התקדמות</h1><p class="muted small">${M[2]}</p></div></div>
-    <div class="seg" style="margin-bottom:8px">${METRICS.map(([k, t]) => `<button data-metric="${k}" aria-pressed="${k === metric}">${t}</button>`).join('')}</div>
-    <div class="seg sm" style="margin-bottom:14px">${[['3m', '3 חודשים'], ['6m', '6 חודשים'], ['1y', 'שנה'], ['all', 'הכל']].map(([k, t]) => `<button data-range="${k}" aria-pressed="${range === k}">${t}</button>`).join('')}</div>
-    <div class="stack">${cards.length ? cards.map(({ l, layers }) => {
-      const main = layers[0].pts, first = main[0], last = main[main.length - 1];
-      const d = main.length > 1 ? last.v - first.v : null, unit = metric === 'vol' ? 'ק״ג נפח' : 'ק״ג';
-      return `<div class="card chart-card" style="--lc:${l.color}">
-        <button class="pg-head" data-lift="${l.id}"><i class="dot"></i><b class="grow">${esc(l.name)}</b>
-          <span class="pg-val"><b>${kg(last.v)}</b> <small class="muted">${metric === 'rm' ? layers[0].rm + 'RM' : unit}</small></span>
-          ${d ? `<span class="delta small ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${kg(Math.abs(d))}</span>` : ''}${ICON.chev}</button>
-        <div class="chart" data-chart="${l.id}"></div>
-        ${metric === 'rm' && layers.length > 1 ? `<div class="legend">${layers.map(x => `<span><svg class="lg" viewBox="0 0 18 4"><line x1="1" y1="2" x2="17" y2="2" stroke="${l.color}" stroke-width="2.5" ${x.i ? 'stroke-dasharray="6 5" opacity=".75"' : ''}/></svg>${x.rm}RM</span>`).join('')}</div>` : ''}
-      </div>`;
-    }).join('') : `<div class="list"><div class="empty">${metric === 'rm' ? 'עוד אין בדיקות RM בטווח הזה.<br>מוסיפים RM בלחיצה על תרגיל במסך הראשי.' : 'עוד אין אימונים בטווח הזה.'}</div></div>`}</div>`;
-  $$('[data-metric]').forEach(b => b.onclick = () => { metric = b.dataset.metric; renderProgress(); });
-  $$('[data-range]').forEach(b => b.onclick = () => { range = b.dataset.range; renderProgress(); });
-  $$('[data-lift]').forEach(b => b.onclick = () => go('#/lift/' + b.dataset.lift));
+    <div class="top"><div><h1>התקדמות</h1><p class="muted small" id="pg-sub"></p></div></div>
+    <div class="seg" style="margin-bottom:8px">${METRICS.map(([k, t]) => `<button data-metric="${k}">${t}</button>`).join('')}</div>
+    <div class="seg sm" style="margin-bottom:14px">${[['3m', '3 חודשים'], ['6m', '6 חודשים'], ['1y', 'שנה'], ['all', 'הכל']].map(([k, t]) => `<button data-range="${k}">${t}</button>`).join('')}</div>
+    <div class="stack" id="pg-cards"></div>`;
+  // switching metric/range only redraws the cards, so the page doesn't jump
+  $$('[data-metric]').forEach(b => b.onclick = () => { metric = b.dataset.metric; fillProgress(); });
+  $$('[data-range]').forEach(b => b.onclick = () => { range = b.dataset.range; fillProgress(); });
+  fillProgress();
+}
+function fillProgress() {
+  const from = rangeFrom(), M = METRICS.find(x => x[0] === metric);
+  $('#pg-sub').textContent = M[2];
+  $$('[data-metric]').forEach(b => b.setAttribute('aria-pressed', b.dataset.metric === metric));
+  $$('[data-range]').forEach(b => b.setAttribute('aria-pressed', b.dataset.range === range));
+  const unit = metric === 'vol' ? 'ק״ג נפח' : 'ק״ג';
+  const cards = lifts().map(l => ({ l, layers: liftSeries(l.id, metric, from) }));
+  const box = $('#pg-cards');
+  box.style.minHeight = box.offsetHeight + 'px'; // hold the height while swapping content
+  box.innerHTML = cards.map(({ l, layers }) => {
+    const main = layers.find(x => x.pts.length) || layers[0] || { pts: [] }, pts = main.pts, n = pts.length;
+    const last = pts[n - 1], d = n > 1 ? last.v - pts[0].v : null;
+    const label = metric === 'rm' ? (main.rm ? main.rm + 'RM' : '') : unit;
+    const head = `<button class="pg-head" data-lift="${l.id}"><i class="dot"></i><b class="grow">${esc(l.name)}</b>
+      ${n ? `<span class="pg-val"><b>${kg(last.v)}</b> <small class="muted">${label}</small></span>` : ''}
+      ${d ? `<span class="delta small ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${kg(Math.abs(d))}</span>` : ''}${ICON.chev}</button>`;
+    const points = layers.reduce((a, x) => a + x.pts.length, 0);
+    if (!points) return `<div class="card chart-card pg-empty" style="--lc:${l.color}">${head}<p class="muted small">${metric === 'rm' ? 'אין עדיין בדיקת RM בטווח הזה. מוסיפים בלחיצה על התרגיל.' : 'אין עדיין אימונים עם התרגיל הזה בטווח הזה.'}</p></div>`;
+    if (points === 1) return `<div class="card chart-card pg-empty" style="--lc:${l.color}">${head}<p class="muted small">יש מדידה אחת (${fmtDate(last.d)}). הגרף יופיע אחרי המדידה הבאה.</p></div>`;
+    const shown = layers.filter(x => x.pts.length);
+    return `<div class="card chart-card" style="--lc:${l.color}">${head}<div class="chart" data-chart="${l.id}"></div>
+      ${metric === 'rm' && shown.length > 1 ? `<div class="legend">${shown.map(x => `<span><svg class="lg" viewBox="0 0 18 4"><line x1="1" y1="2" x2="17" y2="2" stroke="${l.color}" stroke-width="2.5" ${x.i ? 'stroke-dasharray="6 5" opacity=".75"' : ''}/></svg>${x.rm}RM</span>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('') || `<div class="list"><div class="empty">אין תרגילים מוצגים</div></div>`;
+  $$('#pg-cards [data-lift]').forEach(b => b.onclick = () => go('#/lift/' + b.dataset.lift));
   drawProgressCharts(cards);
+  requestAnimationFrame(() => { box.style.minHeight = ''; });
 }
 function drawProgressCharts(cards) {
   cards = cards || lifts().map(l => ({ l, layers: liftSeries(l.id, metric, rangeFrom()) }));
