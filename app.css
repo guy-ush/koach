@@ -255,7 +255,7 @@ textarea.input{min-height:76px;resize:vertical}
 .tabs button{min-width:0}
 
 /* brand: watermark + header logo */
-body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;top:52%;width:min(78vw,440px);aspect-ratio:1;transform:translate(-50%,-50%);background:url(icons/logo.svg) center/contain no-repeat;opacity:.045;filter:grayscale(1)}
+body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;top:52%;width:min(78vw,440px);aspect-ratio:1;transform:translate(-50%,-50%);background:url(icons/logo.png) center/contain no-repeat;opacity:.045;filter:grayscale(1)}
 #app{position:relative;z-index:1}
 .brand{display:flex;align-items:center;gap:12px}
 .brand img{width:58px;height:58px;border-radius:50%;box-shadow:0 4px 14px rgba(0,0,0,.25);flex:none}
