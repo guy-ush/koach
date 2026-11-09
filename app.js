@@ -201,7 +201,7 @@ function renderHome() {
   const n = db.workouts.length, last = sortedWorkouts()[0];
   view.innerHTML = `
     <div class="top"><div class="brand"><img src="icons/logo.png" alt="ZONE Strength Club"><div><h1>יומן כוח</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div></div>
-    ${storageWarning()}${installCard()}
+    ${storageWarning()}${transferCard()}${installCard()}
     <div class="lifts">${lifts().map(l => {
       // each lift shows the RM it actually tracks; others it also has go underneath
       const av = availBases(l.id), main = av[0] || RMS()[0], rest = av.slice(1);
@@ -222,7 +222,7 @@ function renderHome() {
   $$('[data-wk]').forEach(b => b.onclick = () => go('#/workout/' + b.dataset.wk));
   const all = $('[data-all]'); if (all) all.onclick = () => go('#/workouts');
   const bk = $('[data-backup]'); if (bk) bk.onclick = exportJSON;
-  bindInstall();
+  bindInstall(); bindTransfer();
 }
 function backupNag() {
   if (db.settings.drive.on && db.settings.drive.lastAt && Date.now() - db.settings.drive.lastAt < 7 * 864e5) return '';
@@ -716,6 +716,8 @@ function renderSettings() {
       </div>` : ''}
       <p class="note">הכל נשמר בטלפון הזה. בנוסף נשמר כל יום עותק מקומי (14 הימים האחרונים).</p>
       <div class="list">
+        <button class="li" data-copy><div class="grow"><div class="t">העתקת הנתונים</div><div class="s">להעברה מספארי לאפליקציה במסך הבית, או לטלפון אחר</div></div>${ICON.chev}</button>
+        <button class="li" data-paste><div class="grow"><div class="t">הדבקת נתונים</div><div class="s">מוסיף את מה שהועתק, בלי למחוק את מה שכבר כאן</div></div>${ICON.chev}</button>
         <button class="li" data-exp><div class="grow"><div class="t">שמירת גיבוי לקובץ</div><div class="s">${st.lastBackup ? 'אחרון: ' + new Date(st.lastBackup).toLocaleDateString('he-IL') : 'לשמירה בדרייב, בקבצים או במייל'}</div></div>${ICON.chev}</button>
         <button class="li" data-imp><div class="grow"><div class="t">שחזור מקובץ גיבוי</div><div class="s">מחליף את הנתונים הנוכחיים</div></div>${ICON.chev}</button>
         <button class="li" data-snaps><div class="grow"><div class="t">עותקים יומיים במכשיר</div><div class="s">${snaps().length} עותקים</div></div>${ICON.chev}</button>
@@ -725,6 +727,7 @@ function renderSettings() {
       <p class="note">${db.tests.length} בדיקות RM · ${db.workouts.length} אימונים<br>הערכות RM מחושבות בנוסחת Epley: 1RM = משקל × (1 + חזרות/30).</p>
     </div>`;
   $('[data-share]').onclick = shareApp;
+  bindTransfer();
   bindInstall();
   $('[data-addlift]').onclick = () => liftSheet();
   $$('[data-editlift]').forEach(b => b.onclick = () => liftSheet(st.lifts.find(l => l.id === b.dataset.editlift)));
@@ -804,6 +807,67 @@ function restoreFrom(d) {
   const keepDrive = db.settings.drive;
   db = normalize({ tests: d.tests, workouts: d.workouts, settings: { ...(d.settings || {}), drive: keepDrive } });
   save(); applyTheme(); route();
+}
+/* ---------- move data between Safari and the home-screen app (separate storage on iPhone) ---------- */
+const PFX = 'KOACH1:';
+function transferCode() {
+  const json = JSON.stringify({ tests: db.tests, workouts: db.workouts, settings: { lifts: db.settings.lifts, rmTypes: db.settings.rmTypes, round: db.settings.round } });
+  return PFX + btoa(unescape(encodeURIComponent(json)));
+}
+function parseTransfer(text) {
+  const t = String(text || '').trim(), i = t.indexOf(PFX);
+  if (i < 0) throw new Error('nocode');
+  const d = JSON.parse(decodeURIComponent(escape(atob(t.slice(i + PFX.length).split(/\s/)[0]))));
+  if (!Array.isArray(d.tests) || !Array.isArray(d.workouts)) throw new Error('bad');
+  return d;
+}
+// Union by id, so nothing already here is lost.
+function mergeIn(d) {
+  snapshot(true);
+  const byId = (a, b) => { const m = new Map(a.map(x => [x.id, x])); b.forEach(x => { if (!m.has(x.id)) m.set(x.id, x); }); return [...m.values()]; };
+  const before = db.tests.length + db.workouts.length;
+  db.tests = byId(db.tests, d.tests); db.workouts = byId(db.workouts, d.workouts);
+  const known = new Set(db.settings.lifts.map(l => l.id));
+  (d.settings?.lifts || []).forEach(l => { if (!known.has(l.id)) db.settings.lifts.push(l); });
+  db.settings.rmTypes = [...new Set([...db.settings.rmTypes, ...(d.settings?.rmTypes || [])])].sort((a, b) => a - b);
+  save();
+  return db.tests.length + db.workouts.length - before;
+}
+async function copyTransfer() {
+  if (!hasData(db)) return toast('אין עדיין נתונים להעתיק');
+  const code = transferCode();
+  try { await navigator.clipboard.writeText(code); toast('הנתונים הועתקו ✓ עכשיו פתח את האפליקציה ממסך הבית ולחץ „הדבקת נתונים”'); }
+  catch (e) {
+    const s = sheet('העתקת הנתונים', `<p class="note" style="margin-bottom:8px">סמן הכל והעתק:</p><textarea class="input" style="min-height:140px;direction:ltr;font-size:12px" readonly>${code}</textarea>`);
+    const ta = $('textarea', s.el); ta.focus(); ta.select();
+  }
+}
+function pasteTransfer() {
+  const s = sheet('הדבקת נתונים', `<div class="stack">
+      <p class="note">ב${isIOS() ? 'ספארי' : 'דפדפן'}: הגדרות ← „העתקת הנתונים”. אחר כך חזור לכאן והדבק.</p>
+      <button class="btn primary block" data-clip>הדבקה מהלוח</button>
+      <textarea class="input" id="tr-code" style="min-height:110px;direction:ltr;font-size:12px" placeholder="או הדבק כאן ידנית (לחיצה ארוכה ← הדבק)"></textarea>
+    </div>`, '<button class="btn block" data-go>העברה</button>');
+  const run = text => {
+    try { const n = mergeIn(parseTransfer(text)); s.close(); toast(n ? `הועברו ${n} רשומות ✓` : 'הכל כבר היה כאן'); route(); }
+    catch (e) { toast(e.message === 'nocode' ? 'לא נמצא קוד נתונים — העתק שוב מהדפדפן' : 'הקוד לא תקין — העתק שוב'); }
+  };
+  $('[data-clip]', s.el).onclick = async () => {
+    try { const t = await navigator.clipboard.readText(); $('#tr-code', s.el).value = t; run(t); }
+    catch (e) { toast('אין גישה ללוח — הדבק בתיבה ידנית'); $('#tr-code', s.el).focus(); }
+  };
+  $('[data-go]', s.el).onclick = () => run($('#tr-code', s.el).value);
+}
+function transferCard() {
+  if (!isIOS()) return '';
+  if (standalone() && !hasData(db)) return `<div class="card install"><div class="grow"><b>רשמת כבר נתונים בספארי?</b><p class="muted small">באייפון, האפליקציה במסך הבית שומרת בנפרד מספארי. אפשר להעביר אותם לכאן פעם אחת.</p></div><div class="col"><button class="btn sm primary" data-paste>העברה</button></div></div>`;
+  if (!standalone() && hasData(db) && !db.settings.transferDismissed) return `<div class="card install"><div class="grow"><b>מתקין למסך הבית?</b><p class="muted small">שם הנתונים נשמרים בנפרד. העתק אותם עכשיו, ואחרי ההתקנה לחץ „העברה” באפליקציה.</p></div><div class="col"><button class="btn sm primary" data-copy>העתקה</button><button class="icon-btn" data-tdismiss aria-label="סגירה">${ICON.x}</button></div></div>`;
+  return '';
+}
+function bindTransfer() {
+  const c = $('[data-copy]'); if (c) c.onclick = copyTransfer;
+  const p = $('[data-paste]'); if (p) p.onclick = pasteTransfer;
+  const d = $('[data-tdismiss]'); if (d) d.onclick = () => { db.settings.transferDismissed = true; save(); route(); };
 }
 $('#file-json').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
