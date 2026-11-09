@@ -137,7 +137,7 @@ function route() {
   $$('#tabs button').forEach(x => x.setAttribute('aria-current', x.dataset.tab === tab ? 'page' : 'false'));
   $('#fab').hidden = !(a === 'home' || a === 'workouts');
   ({ home: renderHome, lift: () => renderLift(b), workouts: renderWorkouts, workout: () => renderEditor(b),
-     calc: renderCalc, settings: renderSettings }[a] || renderHome)();
+     progress: renderProgress, calc: renderCalc, settings: renderSettings }[a] || renderHome)();
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', route);
@@ -166,7 +166,7 @@ function renderHome() {
         <span class="hd"><span class="nm">${esc(l.name)}</span>${cur ? `<span class="badge one">${main}RM</span>` : ''}</span>
         <span class="big num">${cur ? kg(cur.weight) : '—'}<small>${cur ? 'ק״ג' : ''}</small></span>
         <span class="sub">${!cur ? '<span>עוד אין RM</span>' : ''}${rest.map(r => `<span>${r}RM: <b class="num">${kg(latest(l.id, r).weight)}</b></span>`).join('')}${d != null ? `<span class="delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${kg(Math.abs(d))}</span>` : ''}</span>
-        ${spark(tm.map(t => ({ date: t.date, v: t.weight })))}
+        ${spark(tm.length > 1 ? tm.map(t => ({ date: t.date, v: t.weight })) : trainingSeries(l.id, 'top').map(p => ({ date: p.d, v: p.v })))}
       </button>`;
     }).join('')}</div>
     <div class="section-title"><h2>אימונים אחרונים</h2>${n ? '<button class="btn ghost sm" data-all>הכל</button>' : ''}</div>
@@ -296,16 +296,34 @@ function recentSets(id) {
 }
 
 /* chart: one line per RM type, training e1RM as faint dots */
+const rangeFrom = () => { const cut = { '3m': 91, '6m': 183, '1y': 365 }[range]; return cut ? new Date(Date.now() - cut * 864e5).toISOString().slice(0, 10) : ''; };
 function drawChart(id) {
   const box = $('#chart'); if (!box) return;
-  const color = LIFT(id).color;
-  const cut = { '3m': 91, '6m': 183, '1y': 365 }[range];
-  const from = cut ? new Date(Date.now() - cut * 864e5).toISOString().slice(0, 10) : '';
+  const from = rangeFrom();
   const series = RMS().map(r => testsFor(id, r).filter(t => t.date >= from).map(t => ({ d: t.date, v: t.weight })));
   const st = bestTraining(id).filter(t => t.date >= from).map(t => ({ d: t.date, v: Math.round(t.e * 10) / 10 }));
-  const all = [...series.flat(), ...st];
+  plot(box, LIFT(id).color, [
+    { pts: st, r: 4, op: .35, lbl: 'משוערך · ', noLine: true },
+    ...series.map((s, i) => ({ pts: s, i, r: i ? 3.5 : 4.5, op: i ? .8 : 1, ring: true, lbl: RMS()[i] + 'RM · ' })).reverse()
+  ]);
+}
+// Per-workout training numbers for a lift: heaviest weight, best estimated 1RM, total volume.
+function trainingSeries(lift, metric) {
+  return db.workouts.map(w => {
+    const sets = w.items.filter(i => i.lift === lift).flatMap(i => i.sets);
+    if (!sets.length) return null;
+    const v = metric === 'top' ? Math.max(...sets.map(s => s.weight || 0))
+      : metric === 'e1' ? Math.round(Math.max(...sets.map(s => e1rm(s.weight, s.reps))) * 10) / 10
+      : sets.reduce((a, s) => a + (s.weight || 0) * (s.reps || 0), 0);
+    return v ? { d: w.date, v } : null;
+  }).filter(Boolean).sort((a, b) => a.d.localeCompare(b.d))
+    // one point per day: keep the day's best
+    .reduce((acc, p) => { const l = acc[acc.length - 1]; if (l && l.d === p.d) { if (p.v > l.v) l.v = p.v; } else acc.push({ ...p }); return acc; }, []);
+}
+function plot(box, color, layers, unit = 'ק״ג') {
+  const all = layers.flatMap(l => l.pts);
   if (!all.length) { box.innerHTML = `<div class="chart-empty">אין נתונים בטווח הזה</div>`; return; }
-  const W = Math.max(280, box.clientWidth || 320), H = 210, L = 38, R = 12, T = 12, B = 26;
+  const W = Math.max(280, box.clientWidth || 320), H = 210, L = 44, R = 12, T = 12, B = 26;
   const xs = all.map(p => toDate(p.d).getTime());
   let x0 = Math.min(...xs), x1 = Math.max(...xs);
   if (x1 - x0 < 7 * 864e5) { x0 -= 4 * 864e5; x1 += 4 * 864e5; }
@@ -323,16 +341,55 @@ function drawChart(id) {
     g += `<text x="${px(t)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === ticks ? 'end' : 'middle'}">${d.getDate()}/${d.getMonth() + 1}${range === 'all' || range === '1y' ? '/' + String(d.getFullYear()).slice(2) : ''}</text>`;
   }
   const dashes = ['', '6 5', '2 4', '10 4 2 4', '1 3'];
-  const line = (s, i) => s.length > 1 ? `<polyline points="${s.map(p => P(p).join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"${dashes[i % dashes.length] ? ` stroke-dasharray="${dashes[i % dashes.length]}" opacity=".75"` : ''}/>` : '';
-  const dots = (s, r, op, ring, lbl = '') => s.map(p => { const [x, y] = P(p); return `<circle cx="${x}" cy="${y}" r="${r}" fill="${ring ? 'var(--surface)' : color}" stroke="${color}" stroke-width="${ring ? 2.5 : 0}" opacity="${op}"><title>${lbl}${fmtDate(p.d)} · ${kg(p.v)} ק״ג</title></circle>`; }).join('');
-  const lines = series.map((s, i) => ({ s, i })).reverse().map(({ s, i }) => line(s, i) + dots(s, i ? 3.5 : 4.5, i ? .8 : 1, true, RMS()[i] + 'RM · ')).join('');
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="גרף התקדמות">${g}${dots(st, 4, .35, false, 'משוערך · ')}${lines}</svg>`;
+  const line = (s, i = 0) => s.length > 1 ? `<polyline points="${s.map(p => P(p).join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"${dashes[i % dashes.length] ? ` stroke-dasharray="${dashes[i % dashes.length]}" opacity=".75"` : ''}/>` : '';
+  const dots = (s, r, op, ring, lbl = '') => s.map(p => { const [x, y] = P(p); return `<circle cx="${x}" cy="${y}" r="${r}" fill="${ring ? 'var(--surface)' : color}" stroke="${color}" stroke-width="${ring ? 2.5 : 0}" opacity="${op}"><title>${lbl}${fmtDate(p.d)} · ${kg(p.v)} ${unit}</title></circle>`; }).join('');
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="גרף התקדמות">${g}${layers.map(l => (l.noLine ? '' : line(l.pts, l.i)) + dots(l.pts, l.r ?? 4, l.op ?? 1, l.ring, l.lbl)).join('')}</svg>`;
+}
+/* ---------- progress: charts for every lift ---------- */
+const METRICS = [
+  ['rm', 'RM', 'בדיקות RM'],
+  ['top', 'משקל מקס׳', 'המשקל הכבד ביותר בכל אימון'],
+  ['e1', '1RM משוער', 'לפי הסט הטוב בכל אימון (Epley)'],
+  ['vol', 'נפח', 'סך ק״ג × חזרות בכל אימון']
+];
+let metric = null;
+function liftSeries(id, m, from) {
+  if (m === 'rm') return availBases(id).map((r, i) => ({ pts: testsFor(id, r).filter(t => t.date >= from).map(t => ({ d: t.date, v: t.weight })), i, r: i ? 3.5 : 4.5, ring: true, lbl: r + 'RM · ', rm: r }));
+  return [{ pts: trainingSeries(id, m).filter(p => p.d >= from), r: 3.5, ring: true }];
+}
+function renderProgress() {
+  if (!metric) metric = db.tests.length ? 'rm' : 'top';
+  const from = rangeFrom(), M = METRICS.find(x => x[0] === metric);
+  const cards = lifts().map(l => ({ l, layers: liftSeries(l.id, metric, from) })).filter(c => c.layers.some(x => x.pts.length));
+  view.innerHTML = `
+    <div class="top"><div><h1>התקדמות</h1><p class="muted small">${M[2]}</p></div></div>
+    <div class="seg" style="margin-bottom:8px">${METRICS.map(([k, t]) => `<button data-metric="${k}" aria-pressed="${k === metric}">${t}</button>`).join('')}</div>
+    <div class="seg sm" style="margin-bottom:14px">${[['3m', '3 חודשים'], ['6m', '6 חודשים'], ['1y', 'שנה'], ['all', 'הכל']].map(([k, t]) => `<button data-range="${k}" aria-pressed="${range === k}">${t}</button>`).join('')}</div>
+    <div class="stack">${cards.length ? cards.map(({ l, layers }) => {
+      const main = layers[0].pts, first = main[0], last = main[main.length - 1];
+      const d = main.length > 1 ? last.v - first.v : null, unit = metric === 'vol' ? 'ק״ג נפח' : 'ק״ג';
+      return `<div class="card chart-card" style="--lc:${l.color}">
+        <button class="pg-head" data-lift="${l.id}"><i class="dot"></i><b class="grow">${esc(l.name)}</b>
+          <span class="pg-val"><b>${kg(last.v)}</b> <small class="muted">${metric === 'rm' ? layers[0].rm + 'RM' : unit}</small></span>
+          ${d ? `<span class="delta small ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${kg(Math.abs(d))}</span>` : ''}${ICON.chev}</button>
+        <div class="chart" data-chart="${l.id}"></div>
+        ${metric === 'rm' && layers.length > 1 ? `<div class="legend">${layers.map(x => `<span><svg class="lg" viewBox="0 0 18 4"><line x1="1" y1="2" x2="17" y2="2" stroke="${l.color}" stroke-width="2.5" ${x.i ? 'stroke-dasharray="6 5" opacity=".75"' : ''}/></svg>${x.rm}RM</span>`).join('')}</div>` : ''}
+      </div>`;
+    }).join('') : `<div class="list"><div class="empty">${metric === 'rm' ? 'עוד אין בדיקות RM בטווח הזה.<br>מוסיפים RM בלחיצה על תרגיל במסך הראשי.' : 'עוד אין אימונים בטווח הזה.'}</div></div>`}</div>`;
+  $$('[data-metric]').forEach(b => b.onclick = () => { metric = b.dataset.metric; renderProgress(); });
+  $$('[data-range]').forEach(b => b.onclick = () => { range = b.dataset.range; renderProgress(); });
+  $$('[data-lift]').forEach(b => b.onclick = () => go('#/lift/' + b.dataset.lift));
+  drawProgressCharts(cards);
+}
+function drawProgressCharts(cards) {
+  cards = cards || lifts().map(l => ({ l, layers: liftSeries(l.id, metric, rangeFrom()) }));
+  cards.forEach(({ l, layers }) => { const box = $(`[data-chart="${l.id}"]`); if (box) plot(box, l.color, [...layers].reverse(), metric === 'vol' ? 'ק״ג נפח' : 'ק״ג'); });
 }
 function niceStep(raw) {
   const p = Math.pow(10, Math.floor(Math.log10(raw || 1))), f = raw / p;
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
 }
-let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const m = location.hash.match(/#\/lift\/([\w-]+)/); if (m) drawChart(m[1]); }, 150); });
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const m = location.hash.match(/#\/lift\/([\w-]+)/); if (m) drawChart(m[1]); else if (location.hash.startsWith('#/progress')) drawProgressCharts(); }, 150); });
 
 /* RM add / edit sheet */
 function rmSheet(lift, t) {

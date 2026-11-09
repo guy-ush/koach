@@ -247,3 +247,9 @@ textarea.input{min-height:76px;resize:vertical}
 .addex button.on{border-color:var(--lc);background:color-mix(in srgb,var(--lc) 10%,var(--surface))}
 .addex button b{color:var(--lc);font-weight:500}
 .addex button svg{width:16px;height:16px}
+.pg-head{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;padding:2px 4px 10px;text-align:start}
+.pg-head b{font-weight:500;font-size:15.5px}
+.pg-head .pg-val{white-space:nowrap;font-variant-numeric:tabular-nums}
+.pg-head .pg-val b{font-weight:500}
+.pg-head svg.chev{width:16px;height:16px;color:var(--muted);transform:scaleX(-1)}
+.tabs button{min-width:0}
