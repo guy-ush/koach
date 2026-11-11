@@ -707,6 +707,7 @@ function renderSettings() {
     <div class="top"><div><h1>הגדרות</h1></div></div>
     <div class="stack">
       <div class="list">
+        <a class="li" href="guide.html" style="color:inherit;text-decoration:none"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 7h6M8 11h6"/></svg><div class="grow"><div class="t">מדריך שימוש</div><div class="s">איך מתקינים, רושמים RM ומתעדים אימון</div></div>${ICON.chev}</a>
         <button class="li" data-share>${ICON.share}<div class="grow"><div class="t">שליחת האפליקציה לחבר</div><div class="s">כל אחד מקבל אפליקציה משלו, והנתונים נשמרים רק אצלו בטלפון</div></div>${ICON.chev}</button>
         ${standalone() ? '' : `<div class="li"><div class="grow"><div class="t">התקנה על הטלפון</div><div class="s">${installHow()}</div></div>${installEvt ? '<button class="btn sm primary" data-install>התקנה</button>' : ''}</div>`}
       </div>
@@ -1113,6 +1114,19 @@ checkStorage();
   timers.push(setTimeout(impact, 2500)); // safety net if the animation event never fires
   sp.onclick = () => { timers.forEach(clearTimeout); sp.classList.add('out'); setTimeout(() => sp.remove(), 600); };
 })();
+// Number fields: tapping one clears it so the new number can be typed straight away.
+// The old value stays visible as a faint hint, and comes back if nothing is typed.
+document.addEventListener('focusin', e => {
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement) || el.type !== 'number' || el.value === '') return;
+  el.dataset.prev = el.value; el.dataset.ph = el.placeholder; el.placeholder = el.value; el.value = '';
+});
+document.addEventListener('focusout', e => {
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement) || el.dataset.prev === undefined) return;
+  if (el.value === '') el.value = el.dataset.prev; // nothing typed: keep what was there
+  el.placeholder = el.dataset.ph || ''; delete el.dataset.prev; delete el.dataset.ph;
+});
 applyTheme();
 route();
 snapshot();

@@ -1,5 +1,5 @@
 // Offline shell for יומן כח-ZONE. Bump VERSION whenever app files change.
-const VERSION = 'koach-v22';
+const VERSION = 'koach-v24';
 const SHELL = [
   './', 'index.html', 'app.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/logo.png', 'icons/kettlebell.webp', 'icons/icon-192.png', 'icons/apple-touch-icon.png',

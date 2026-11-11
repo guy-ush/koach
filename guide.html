@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>מדריך – יומן כח-ZONE</title>
+<meta name="description" content="מדריך קצר לאפליקציית יומן כח-ZONE: התקנה, רישום RM, תיעוד אימונים וגרפי התקדמות.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#111111">
+<link rel="icon" href="icons/logo.png" type="image/png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+:root{
+  --bg:#F7F5EF;--surface:#fff;--surface-2:#EFECE4;--ink:#17201C;--muted:#5F6964;--line:#E2DDD1;
+  --accent:#1F3B33;--red:#A3242A;--blue:#2E5FA8;--gold:#C0922F;--radius:20px;color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101513;--surface:#19201D;--surface-2:#232B28;--ink:#ECE9E1;--muted:#9AA39E;--line:#2C3532;--accent:#7FB8A4;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101513;--surface:#19201D;--surface-2:#232B28;--ink:#ECE9E1;--muted:#9AA39E;--line:#2C3532;--accent:#7FB8A4;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font-family:Heebo,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+img{max-width:100%;height:auto;display:block}
+h1,h2,h3{margin:0;line-height:1.2;font-weight:500}
+p{margin:0}
+.wrap{max-width:880px;margin:0 auto;padding:0 16px}
+
+/* cover */
+.cover{background:#0e0e0e;color:#ECE9E1;padding:calc(env(safe-area-inset-top) + 34px) 0 0;overflow:hidden}
+.cover .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:end}
+.cover .logo{width:84px;height:84px;border-radius:50%;box-shadow:0 8px 24px rgba(0,0,0,.5);margin-bottom:18px}
+.cover h1{font-family:"Frank Ruhl Libre",Heebo,serif;font-size:clamp(34px,7vw,52px)}
+.cover .lead{color:#B9B5AC;margin:12px 0 22px;font-size:17.5px;max-width:30em}
+.cover .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:34px}
+.cover .chips span{border:1px solid #333;border-radius:99px;padding:4px 12px;font-size:14px;color:#D8D4CB}
+.cover .phone{margin-bottom:-60px;justify-self:center;width:min(100%,250px)}
+.cover .open{display:inline-flex;align-items:center;gap:8px;background:#ECE9E1;color:#0e0e0e;text-decoration:none;font-weight:500;padding:12px 20px;border-radius:14px;margin-bottom:34px}
+.cover + .wrap{padding-top:84px}
+
+/* phone frame */
+.phone{border-radius:34px;padding:7px;background:#111;box-shadow:0 18px 40px rgba(0,0,0,.22),0 2px 6px rgba(0,0,0,.2)}
+.phone img{border-radius:28px;width:100%}
+.zoom{border-radius:16px;overflow:hidden;border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.08)}
+
+/* sections */
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 30px}
+.toc a{display:flex;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;text-decoration:none;color:var(--ink);font-size:15px}
+.toc b{display:grid;place-items:center;flex:none;width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--bg);font-size:13px;font-weight:500}
+section{padding:26px 0 30px;border-top:1px solid var(--line)}
+.sec-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.num{display:grid;place-items:center;flex:none;width:40px;height:40px;border-radius:12px;background:var(--red);color:#fff;font-weight:500;font-size:19px}
+.sec-head h2{font-size:clamp(22px,4.6vw,28px)}
+.row{display:grid;grid-template-columns:1fr 240px;gap:26px;align-items:start}
+.row.two{grid-template-columns:1fr 1fr}
+.row .phone{max-width:240px;justify-self:center}
+.steps{margin:0;padding:0;list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:12px}
+.steps li{counter-increment:s;position:relative;padding-inline-start:38px}
+.steps li::before{content:counter(s);position:absolute;inset-inline-start:0;top:1px;width:26px;height:26px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-size:13.5px;font-weight:500}
+.steps b,.text b,.bullets b{font-weight:500}
+.bullets{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.bullets li{position:relative;padding-inline-start:18px}
+.bullets li::before{content:"";position:absolute;inset-inline-start:2px;top:.62em;width:7px;height:7px;border-radius:50%;background:var(--red)}
+.text{display:flex;flex-direction:column;gap:12px}
+.kbd{display:inline-block;padding:0 8px;border-radius:7px;background:var(--surface-2);border:1px solid var(--line);font-size:14.5px;white-space:nowrap}
+.tip,.warn{border-radius:16px;padding:12px 14px 12px 14px;display:flex;gap:10px;align-items:flex-start;font-size:15.5px}
+.tip{background:color-mix(in srgb,var(--blue) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--blue) 30%,transparent)}
+.warn{background:color-mix(in srgb,var(--red) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--red) 35%,transparent)}
+.tip i,.warn i{font-style:normal;font-size:19px;line-height:1.4}
+.os{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.os .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.os h3{font-size:18px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.ico{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--surface-2);vertical-align:middle;margin:0 2px}
+.ico svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.gallery{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:18px;justify-content:center}
+.gallery figure{margin:0}
+.gallery figcaption{text-align:center;font-size:14px;color:var(--muted);margin-top:8px}
+.faq details{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px;margin-bottom:10px}
+.faq summary{cursor:pointer;font-weight:500;list-style:none}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::before{content:"＋";display:inline-block;width:22px;color:var(--muted)}
+.faq details[open] summary::before{content:"－"}
+.faq details p{margin-top:8px;color:var(--ink)}
+footer{padding:26px 0 calc(env(safe-area-inset-bottom) + 40px);text-align:center;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
+footer a{color:var(--accent)}
+
+@media (max-width:640px){
+  .cover .wrap{grid-template-columns:1fr}
+  .cover .phone{width:62%;margin-top:4px}
+  .row,.row.two{grid-template-columns:1fr}
+  .row .phone{max-width:230px}
+  .os{grid-template-columns:1fr}
+  .gallery{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+}
+
+/* PDF / print */
+@page{size:A4;margin:14mm}
+@media print{
+  :root{--bg:#fff}
+  body{font-size:12.5pt}
+  .cover{-webkit-print-color-adjust:exact;print-color-adjust:exact;padding-top:26px}
+  .cover .phone{margin-bottom:0;width:190px}
+  .cover + .wrap{padding-top:20px}
+  .cover .open,.toc{display:none}
+  section{break-inside:avoid-page;padding:16px 0 18px}
+  #install,#workout{break-inside:auto}
+  .row{grid-template-columns:1fr 200px}
+  .row .phone{max-width:200px}
+  .phone,.num,.tip,.warn,.steps li::before,.bullets li::before,.kbd,.ico{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .faq details{break-inside:avoid}
+  .faq details>p{display:block}
+}
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="wrap">
+    <div>
+      <img class="logo" src="icons/logo.png" alt="ZONE Strength Club">
+      <h1>יומן כח-ZONE</h1>
+      <p class="lead">האפליקציה של המועדון למעקב אחרי המשקלים: רושמים RM, מתעדים אימונים, והאפליקציה מחשבת לבד את המשקל לפי אחוזים ומראה גרף התקדמות.</p>
+      <div class="chips"><span>חינם</span><span>בלי הרשמה</span><span>עובד גם בלי אינטרנט</span><span>הנתונים נשארים אצלך</span></div>
+      <a class="open" href="./">פתיחת האפליקציה ←</a>
+    </div>
+    <div class="phone"><img src="guide/01-splash.webp" alt="מסך הפתיחה של האפליקציה" width="620" height="1056"></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <nav class="toc" aria-label="תוכן">
+    <a href="#install"><b>1</b>התקנה</a>
+    <a href="#rm"><b>2</b>רישום RM</a>
+    <a href="#workout"><b>3</b>תיעוד אימון</a>
+    <a href="#progress"><b>4</b>התקדמות</a>
+    <a href="#calc"><b>5</b>מחשבון אחוזים</a>
+    <a href="#backup"><b>6</b>גיבוי ומעבר טלפון</a>
+    <a href="#faq"><b>?</b>שאלות נפוצות</a>
+  </nav>
+
+  <!-- 1 -->
+  <section id="install">
+    <div class="sec-head"><span class="num">1</span><h2>התקנה על הטלפון (פעם אחת)</h2></div>
+    <div class="warn" style="margin-bottom:16px"><i>⚠️</i><p><b>פותחים את הקישור בספארי או בכרום, לא מתוך וואטסאפ.</b> בדפדפן הפנימי של וואטסאפ או אינסטגרם הנתונים נמחקים כשסוגרים. אם הקישור נפתח שם, לוחצים על <span class="kbd">⋯</span> ובוחרים „פתיחה בדפדפן”.</p></div>
+    <div class="os">
+      <div class="card">
+        <h3>📱 אייפון</h3>
+        <ol class="steps">
+          <li>פותחים את הקישור ב<b>ספארי</b>.</li>
+          <li>לוחצים על כפתור השיתוף <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></span> בתחתית המסך.</li>
+          <li>גוללים ובוחרים <b>„הוספה למסך הבית”</b> <span class="ico"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span>, ואז „הוספה”.</li>
+          <li>מעכשיו נכנסים <b>רק מהאייקון</b> במסך הבית.</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h3>🤖 אנדרואיד</h3>
+        <ol class="steps">
+          <li>פותחים את הקישור ב<b>כרום</b>.</li>
+          <li>לוחצים על התפריט <span class="kbd">⋮</span> למעלה.</li>
+          <li>בוחרים <b>„התקנת אפליקציה”</b> או „הוספה למסך הבית”.</li>
+          <li>מעכשיו נכנסים <b>רק מהאייקון</b>.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="tip" style="margin-top:14px"><i>💡</i><p>כבר רשמת נתונים בספארי לפני ההתקנה? באייפון האפליקציה במסך הבית שומרת בנפרד. בספארי לוחצים <b>הגדרות ← העתקת הנתונים</b>, ובאפליקציה <b>הגדרות ← הדבקת נתונים</b>.</p></div>
+  </section>
+
+  <!-- 2 -->
+  <section id="rm">
+    <div class="sec-head"><span class="num">2</span><h2>רושמים RM לכל תרגיל</h2></div>
+    <div class="row">
+      <div class="text">
+        <p>במסך הראשי יש כרטיס לכל תרגיל: בק סקוואט, מיליטרי פרס, דדליפט ובנץ׳ פרס.</p>
+        <ol class="steps">
+          <li>לוחצים על הכרטיס של התרגיל.</li>
+          <li>לוחצים <span class="kbd">＋ RM חדש</span>.</li>
+          <li>בוחרים את סוג המדידה: <b>1RM</b>, <b>5RM</b> או <b>10RM</b>.</li>
+          <li>רושמים את המשקל ואת התאריך ולוחצים <b>שמירה</b>.</li>
+        </ol>
+        <div class="tip"><i>💡</i><p>כל תרגיל נמדד במה שמתאים לו: לסקוואט אפשר לרשום 1RM ולבנץ׳ 5RM. האפליקציה מחשבת את האחוזים מה־RM שקיים לכל תרגיל.</p></div>
+        <p class="muted">שברת שיא? תקבל הודעה 💪. בעמוד של התרגיל רואים את כל הבדיקות, גרף וטבלת אחוזים מוכנה.</p>
+      </div>
+      <div class="phone"><img src="guide/04-add-rm.webp" alt="הוספת RM" width="620" height="1056" loading="lazy"></div>
+    </div>
+    <div class="gallery" style="margin-top:22px">
+      <figure><div class="phone"><img src="guide/02-home.webp" alt="המסך הראשי" width="620" height="1056" loading="lazy"></div><figcaption>המסך הראשי: RM נוכחי ומגמה לכל תרגיל</figcaption></figure>
+      <figure><div class="phone"><img src="guide/03-lift.webp" alt="עמוד תרגיל" width="620" height="1056" loading="lazy"></div><figcaption>עמוד תרגיל: כל ה־RM וגרף</figcaption></figure>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="workout">
+    <div class="sec-head"><span class="num">3</span><h2>מתעדים אימון</h2></div>
+    <div class="row">
+      <div class="text">
+        <ol class="steps">
+          <li>לוחצים על <span class="kbd">＋</span> הירוק, או בלשונית <b>אימונים</b> על <span class="kbd">＋ אימון</span>.</li>
+          <li><b>בוחרים את התרגילים של האימון</b>. אפשר כמה, ואפשר גם להוסיף „תרגיל אחר” כמו מתח או חתירה.</li>
+          <li>לכל סט רושמים <b>חזרות × משקל</b>.</li>
+          <li>לוחצים <span class="kbd">＋ סט</span> לסט נוסף, או <b>„שכפל אחרון”</b> לסט זהה.</li>
+          <li>בסוף לוחצים <b>שמירת אימון</b>.</li>
+        </ol>
+      </div>
+      <div class="phone"><img src="guide/05-new-workout.webp" alt="בחירת תרגילים לאימון" width="620" height="1056" loading="lazy"></div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:20px">לפי ק״ג או לפי אחוזים</h3>
+    <div class="row">
+      <div class="text">
+        <p>ליד כל סט יש כפתור <span class="kbd">ק״ג</span> / <span class="kbd">%</span>. במצב <b>%</b> רושמים אחוז, והאפליקציה מחשבת את המשקל מה־RM שלך ומעגלת ל־2.5 ק״ג.</p>
+        <div class="zoom"><img src="guide/07b-set.webp" alt="סט: 5 חזרות ב־75% = 110 ק״ג" width="620" height="133" loading="lazy"></div>
+        <p class="muted">בדוגמה: 5 חזרות ב־75% מה־1RM, והמשקל המחושב הוא 110 ק״ג.</p>
+        <div class="tip"><i>👆</i><p><b>לחיצה על מספר מוחקת אותו</b>, ואפשר להקליד ישר בלי למחוק. אם לא מקלידים כלום, המספר הקודם חוזר.</p></div>
+        <div class="tip"><i>🔀</i><p>אם לתרגיל יש גם 1RM וגם 5RM, האפליקציה תשאל מאיזה מהם לחשב. אם יש רק אחד, היא בוחרת אותו לבד.</p></div>
+      </div>
+      <div class="phone"><img src="guide/07-editor.webp" alt="רישום סטים באחוזים" width="620" height="1056" loading="lazy"></div>
+    </div>
+    <div class="gallery" style="margin-top:22px">
+      <figure><div class="phone"><img src="guide/06-ask-base.webp" alt="בחירה מאיזה RM לחשב" width="620" height="1056" loading="lazy"></div><figcaption>יש כמה RM? בוחרים מאיזה לחשב</figcaption></figure>
+      <figure><div class="phone"><img src="guide/08-workouts.webp" alt="רשימת אימונים" width="620" height="1056" loading="lazy"></div><figcaption>כל האימונים לפי חודשים</figcaption></figure>
+    </div>
+    <div class="tip" style="margin-top:16px"><i>🔁</i><p><b>אותו אימון שוב?</b> פותחים אימון קודם ולוחצים על אייקון ההעתקה למעלה. נוצר אימון חדש עם אותם תרגילים, והאחוזים מחושבים לפי ה־RM העדכני.</p></div>
+  </section>
+
+  <!-- 4 -->
+  <section id="progress">
+    <div class="sec-head"><span class="num">4</span><h2>רואים התקדמות</h2></div>
+    <div class="row">
+      <div class="text">
+        <p>בלשונית <b>התקדמות</b> יש גרף לכל תרגיל. בוחרים למעלה מה להציג:</p>
+        <ul class="bullets">
+          <li><b>RM</b>: הבדיקות שלך לאורך זמן.</li>
+          <li><b>משקל מקס׳</b>: הכי כבד שהרמת בכל אימון.</li>
+          <li><b>1RM משוער</b>: חישוב לפי הסט הטוב בכל אימון.</li>
+          <li><b>נפח</b>: סך הק״ג כפול החזרות בכל אימון.</li>
+        </ul>
+        <p>ואפשר לבחור טווח: 3 חודשים, חצי שנה, שנה או הכל.</p>
+        <div class="tip"><i>📈</i><p>הגרף מופיע מהמדידה השנייה. עם מדידה אחת בלבד מוצג הערך וכתוב שהגרף יופיע בהמשך.</p></div>
+      </div>
+      <div class="phone"><img src="guide/09-progress.webp" alt="לשונית התקדמות" width="620" height="1056" loading="lazy"></div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="calc">
+    <div class="sec-head"><span class="num">5</span><h2>מחשבון אחוזים</h2></div>
+    <div class="row">
+      <div class="text">
+        <p>בלשונית <b>אחוזים</b> בוחרים תרגיל, וה־RM שלך כבר מופיע. מזיזים את הסרגל לאחוז הרצוי ורואים את המשקל לעבודה.</p>
+        <p>מתחת יש טבלה מלאה מ־50% עד 105%, עם הערכה של כמה חזרות אפשר לעשות בכל משקל.</p>
+        <p class="muted">אפשר גם להקליד RM ידנית, למשל כדי לחשב למישהו אחר.</p>
+      </div>
+      <div class="phone"><img src="guide/11-calc.webp" alt="מחשבון אחוזים" width="620" height="1056" loading="lazy"></div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="backup">
+    <div class="sec-head"><span class="num">6</span><h2>גיבוי ומעבר טלפון</h2></div>
+    <div class="row">
+      <div class="text">
+        <p>כל הנתונים נשמרים <b>רק בטלפון שלך</b>. אף אחד אחר לא רואה אותם, וגם לא המאמן.</p>
+        <ul class="bullets">
+          <li><b>שמירת גיבוי לקובץ</b>: שומרים בקבצים, בדרייב או במייל. מומלץ פעם בחודש.</li>
+          <li><b>העתקת הנתונים / הדבקת נתונים</b>: להעברה לטלפון חדש או מספארי לאפליקציה. ההדבקה רק מוסיפה ולא מוחקת.</li>
+          <li><b>עותקים יומיים במכשיר</b>: האפליקציה שומרת לבד עותק לכל יום, 14 ימים אחורה.</li>
+        </ul>
+        <div class="warn"><i>📱</i><p><b>מחליפים טלפון או מוחקים את האפליקציה?</b> קודם עושים „שמירת גיבוי לקובץ”.</p></div>
+      </div>
+      <div class="phone"><img src="guide/12-backup.webp" alt="מסך הגיבוי בהגדרות" width="620" height="1056" loading="lazy"></div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="faq">
+    <div class="sec-head"><span class="num" style="background:var(--accent)">?</span><h2>שאלות נפוצות</h2></div>
+    <details><summary>הנתונים שלי נעלמו</summary><p>כנראה האפליקציה נפתחה מתוך וואטסאפ או בגלישה פרטית, ושם הדפדפן מוחק הכל בסגירה. התקינו לפי שלב 1 ונכנסים רק מהאייקון. באייפון, אם רשמתם בספארי ואז התקנתם, הנתונים נשארו בספארי: מעבירים אותם עם העתקה והדבקה בהגדרות.</p></details>
+    <details><summary>מופיעה הודעה „יש גרסה חדשה”</summary><p>לוחצים <b>עדכון</b> והאפליקציה מתעדכנת מיד. הנתונים לא נפגעים.</p></details>
+    <details><summary>איך מוסיפים תרגיל שלא ברשימה?</summary><p>באימון: „＋ תרגיל אחר”. או בהגדרות ← תרגילים ← „＋ תרגיל”. שם אפשר גם לשנות שם של תרגיל או להסתיר אותו.</p></details>
+    <details><summary>טעיתי ברישום. איך מתקנים?</summary><p>לוחצים על האימון ברשימה או על בדיקת ה־RM בעמוד התרגיל, משנים ושומרים. אפשר גם למחוק בכפתור הפח.</p></details>
+    <details><summary>אפשר לבחור עיגול אחר מ־2.5 ק״ג?</summary><p>כן. בהגדרות ← „עיגול משקל מחושב” בוחרים 1, ‏1.25, ‏2.5 או 5.</p></details>
+    <details><summary>איך שולחים את האפליקציה לחבר?</summary><p>בהגדרות ← „שליחת האפליקציה לחבר”. כל אחד מקבל אפליקציה משלו, עם הנתונים שלו.</p></details>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><b>יומן כח-ZONE</b> · ZONE Strength Club</p>
+    <p><a href="./">פתיחת האפליקציה</a></p>
+  </div>
+</footer>
+</body>
+</html>
