@@ -1,4 +1,4 @@
-/* יומן כוח — RM and training log.
+/* יומן כח-ZONE — RM and training log.
    Local-first: everything lives in localStorage on this device.
    Optional: automatic backup of one JSON file to the user's own Google Drive. */
 (() => {
@@ -202,7 +202,7 @@ function spark(points) {
 function renderHome() {
   const n = db.workouts.length, last = sortedWorkouts()[0];
   view.innerHTML = `
-    <div class="top"><div class="brand"><img src="icons/logo.png" alt="ZONE Strength Club"><div><h1>יומן כוח</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div></div>
+    <div class="top"><div class="brand"><img src="icons/logo.png" alt="ZONE Strength Club"><div><h1>יומן כח-ZONE</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div></div>
     ${storageWarning()}${transferCard() || installCard()}
     <div class="lifts">${lifts().map(l => {
       // each lift shows the RM it actually tracks; others it also has go underneath
@@ -273,8 +273,8 @@ function bindInstall() {
 }
 async function shareApp() {
   const url = new URL('./', location.href).href;
-  const text = 'יומן כוח – מעקב RM ואימונים. הכל נשמר רק אצלך בטלפון, בלי הרשמה.';
-  if (navigator.share) { try { await navigator.share({ title: 'יומן כוח', text, url }); } catch (e) { /* cancelled */ } return; }
+  const text = 'יומן כח-ZONE – מעקב RM ואימונים. הכל נשמר רק אצלך בטלפון, בלי הרשמה.';
+  if (navigator.share) { try { await navigator.share({ title: 'יומן כח-ZONE', text, url }); } catch (e) { /* cancelled */ } return; }
   try { await navigator.clipboard.writeText(`${text}\n${url}`); toast('הקישור הועתק'); } catch (e) { prompt('העתק את הקישור:', url); }
 }
 
@@ -814,7 +814,7 @@ async function exportJSON() {
   const name = `koach-backup-${today()}.json`;
   const file = typeof File === 'function' ? new File([text], name, { type: 'application/json' }) : null;
   if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'גיבוי יומן כוח' }); } catch (e) { if (e.name === 'AbortError') return; download(name, text, 'application/json'); }
+    try { await navigator.share({ files: [file], title: 'גיבוי יומן כח-ZONE' }); } catch (e) { if (e.name === 'AbortError') return; download(name, text, 'application/json'); }
   } else download(name, text, 'application/json');
   db.settings.lastBackup = Date.now(); save(); toast('הגיבוי נוצר');
   if (/^#\/(settings|home)|^$/.test(location.hash)) route();
@@ -930,7 +930,7 @@ function exportCSV() {
    so uploads run right after the user saves something; a token lasts about an hour. */
 const drive = (() => {
   const SCOPE = 'https://www.googleapis.com/auth/drive.file';
-  const NAME = 'יומן כוח – גיבוי.json';
+  const NAME = 'יומן כח-ZONE – גיבוי.json';
   let client = null, pending = null, loading = null;
   const available = () => !!CFG.googleClientId;
   const st = () => db.settings.drive;
