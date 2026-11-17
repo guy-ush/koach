@@ -225,9 +225,17 @@ function amountSheet(f, meal, edit) {
         <div class="row"><button class="btn sm" data-q="${byWeight ? -10 : -0.5}">−</button><input class="input num" id="n-qty" type="number" inputmode="decimal" step="${byWeight ? 5 : 0.25}" min="0" value="${byWeight ? grams : qty}" style="width:84px;text-align:center"><button class="btn sm" data-q="${byWeight ? 10 : 0.5}">+</button></div></div>
       <div class="card" id="n-prev"></div>
       ${byWeight ? `<p class="note">${RULE_NOTE}</p>` : ''}
+      <button class="btn sm" data-fix style="align-self:flex-start">✎ תיקון ידני של הכוכבים</button>
+      <div class="card fixbox" id="n-fix" hidden>
+        <div class="muted small" style="margin-bottom:8px">כוכבים לכל המנה הזו (לא למנה אחת במאגר)</div>
+        <div class="grid3">${MAC.map(([m, name]) => `<label class="field"><span>${name}</span><input class="input num" data-fx="${m}" type="number" inputmode="decimal" step="0.25" min="0" style="text-align:center"></label>`).join('')}</div>
+        <label class="row" style="gap:8px;margin-top:10px;font-size:14px"><input type="checkbox" id="n-fix-save"> לשמור את התיקון גם במאגר שלי לפעם הבאה</label>
+      </div>
       <div class="chips">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
     </div>`, `<div class="row">${edit ? `<button class="btn danger" data-del>${k.ICON.trash}</button>` : ''}<button class="btn primary block grow" data-ok>${edit ? 'שמירה' : 'הוספה'}</button></div>`);
-  const stars = () => byWeight ? starsFromGrams(labelGrams(per100, grams)) : { p: f.p * qty, f: f.f * qty, c: f.c * qty };
+  let fixed = null; // manual stars for the whole portion, when the automatic conversion looks wrong
+  const auto = () => byWeight ? starsFromGrams(labelGrams(per100, grams)) : { p: f.p * qty, f: f.f * qty, c: f.c * qty };
+  const stars = () => fixed || auto();
   const prev = () => {
     const st = stars(), g = byWeight ? labelGrams(per100, grams) : null;
     k.$('#n-prev', s.el).innerHTML = `<div class="nprev">${MAC.map(([m, name]) => `<div class="${m}"><span>${name}</span><b class="num">${fmt(st[m])} ★</b><small>${byWeight ? `${fmt(g[m])} ג׳ · <bdi dir="ltr">${exactStars(m, g[m]).toFixed(2)}</bdi>` : `${Math.round(gramsOf(m, st[m]))} ג׳`}</small></div>`).join('')}<div><span>קלוריות</span><b class="num">${k.kg(kcalOf(st))}</b><small>קק״ל</small></div></div>`;
@@ -240,13 +248,30 @@ function amountSheet(f, meal, edit) {
     prev();
   });
   k.$$('[data-meal]', s.el).forEach(b => b.onclick = () => { meal = b.dataset.meal; k.$$('[data-meal]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)); });
+  const fixBox = k.$('#n-fix', s.el), fxIn = k.$$('[data-fx]', s.el);
+  const readFix = () => { fixed = Object.fromEntries(fxIn.map(i => [i.dataset.fx, Math.max(0, parseFloat(i.value) || 0)])); prev(); };
+  k.$('[data-fix]', s.el).onclick = () => {
+    if (fixBox.hidden) { const st = stars(); fxIn.forEach(i => { i.value = st[i.dataset.fx] || 0; }); fixBox.hidden = false; readFix(); }
+    else { fixBox.hidden = true; fixed = null; prev(); }
+  };
+  fxIn.forEach(i => i.oninput = readFix);
   prev();
   k.$('[data-ok]', s.el).onclick = () => {
     if (byWeight ? !grams : !qty) return k.toast('צריך כמות');
     const n = N(), st = stars();
-    const fields = byWeight ? { qty: 1, ...st, serving: `${grams} גרם`, grams, p100: per100.p, f100: per100.f, c100: per100.c } : { qty };
-    if (edit) Object.assign(edit, fields, { meal });
-    else n.log.push({ id: k.uid(), date: curDate, meal, name: f.name, serving: f.serving || '', p: f.p || 0, f: f.f || 0, c: f.c || 0, ...fields, at: Date.now() });
+    let fields = byWeight ? { qty: 1, ...st, serving: `${grams} גרם`, grams, p100: per100.p, f100: per100.f, c100: per100.c } : { qty };
+    if (fixed) {
+      const serving = byWeight ? `${grams} גרם` : `${qty !== 1 ? fmt(qty) + ' × ' : ''}${f.serving || 'מנה'}`;
+      fields = { qty: 1, ...fixed, serving, fixed: true, p100: undefined, f100: undefined, c100: undefined, grams: byWeight ? grams : undefined };
+      if (k.$('#n-fix-save', s.el).checked) { // remember the corrected portion as a food of my own
+        const per = qty && !byWeight ? Object.fromEntries(MAC.map(([m]) => [m, r2(fixed[m] / qty)])) : fixed;
+        const own = n.foods.find(x => x.name === f.name), food = { name: f.name, serving: byWeight ? `${grams} גרם` : (f.serving || 'מנה'), ...per, note: 'תוקן ידנית' };
+        if (own) { Object.assign(own, food); delete own.p100; delete own.f100; delete own.c100; delete own.g; }
+        else n.foods.unshift({ id: k.uid(), ...food });
+      }
+    }
+    if (edit) { Object.assign(edit, fields, { meal }); Object.keys(edit).forEach(x => edit[x] === undefined && delete edit[x]); }
+    else { const e = { id: k.uid(), date: curDate, meal, name: f.name, serving: f.serving || '', p: f.p || 0, f: f.f || 0, c: f.c || 0, ...fields, at: Date.now() }; Object.keys(e).forEach(x => e[x] === undefined && delete e[x]); n.log.push(e); }
     save(); s.close(); renderDay(); if (!edit) k.toast(`נוסף: ${f.name}`);
   };
   const del = k.$('[data-del]', s.el);
@@ -254,7 +279,7 @@ function amountSheet(f, meal, edit) {
 }
 function entrySheet(e) {
   if (!e) return;
-  amountSheet({ name: e.name, serving: e.serving, p: e.p, f: e.f, c: e.c, p100: e.p100, f100: e.f100, c100: e.c100, g: e.grams }, e.meal, e);
+  amountSheet({ name: e.name, serving: e.serving, p: e.p, f: e.f, c: e.c, p100: e.p100, f100: e.f100, c100: e.c100, g: e.grams, note: e.fixed ? 'תוקן ידנית' : '' }, e.meal, e);
 }
 function manualSheet(meal) {
   const k = K(), n = N(); let mode = 'label';

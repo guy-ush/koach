@@ -516,3 +516,6 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .coach b{font-weight:500}
 .coach-why{background:var(--accent-soft);border-radius:12px;padding:10px 12px;font-size:13.5px;display:flex;flex-direction:column;gap:4px}
 .coach-why p{margin:0}
+
+.fixbox{padding:12px}
+.fixbox input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
