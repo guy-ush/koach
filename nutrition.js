@@ -50,7 +50,10 @@ function recent() {
   const seen = new Set(), out = [];
   [...N().log].sort((a, b) => (b.at || 0) - (a.at || 0)).forEach(e => {
     if (seen.has(e.name)) return; seen.add(e.name);
-    out.push({ id: 'r:' + e.name, name: e.name, serving: e.serving, p: e.p, f: e.f, c: e.c });
+    const lib = N().foods.find(f => f.name === e.name); // a saved food keeps its label values
+    out.push(lib ? { ...lib, id: 'r:' + e.name } : e.p100 != null
+      ? { id: 'r:' + e.name, name: e.name, serving: '100 גרם', ...starsFromGrams(labelGrams({ p: e.p100, f: e.f100, c: e.c100 }, 100)), p100: e.p100, f100: e.f100, c100: e.c100, g: e.grams }
+      : { id: 'r:' + e.name, name: e.name, serving: e.serving, p: e.p, f: e.f, c: e.c });
   });
   return out.slice(0, 12);
 }
@@ -131,7 +134,7 @@ function addSheet(meal) {
       <div class="chips" id="n-meals">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
       <input class="input" id="n-q" placeholder="חיפוש מאכל…" autocomplete="off">
       <div id="n-res"></div>
-    </div>`, `<button class="btn block" data-manual>${k.ICON.plus} הוספה ידנית (כוכבים או גרמים)</button>`);
+    </div>`, `<button class="btn block" data-manual>${k.ICON.plus} מהתווית או ידנית (גרמים / כוכבים)</button>`);
   s.el.classList.add('full');
   const pick = () => s.el.querySelector('[data-meal][aria-pressed="true"]').dataset.meal;
   k.$$('[data-meal]', s.el).forEach(b => b.onclick = () => k.$$('[data-meal]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)));
@@ -160,57 +163,105 @@ function addSheet(meal) {
   k.$('#n-q', s.el).oninput = draw; draw();
   k.$('[data-manual]', s.el).onclick = () => manualSheet(pick());
 }
+/* Converting grams of a macro into stars, the way the coach's food list does it:
+   exact stars = grams / grams-per-star (protein 20, fat 10, carbs 20);
+   up to 0.3 of a star is not counted, 0.3–0.4 is a quarter, otherwise the nearest half star.
+   (Checked against the Notion food list: 65 of 69 values match.) */
+function starRule(x) {
+  if (!(x > 0.3)) return 0;
+  if (x < 0.4) return 0.25;
+  return Math.floor(x * 2 + 0.5) / 2;
+}
+const exactStars = (k, grams) => (grams || 0) / N().grams[k];
+const starsFromGrams = g => Object.fromEntries(MAC.map(([k]) => [k, starRule(exactStars(k, g[k]))]));
+const labelGrams = (per100, grams) => Object.fromEntries(MAC.map(([k]) => [k, (per100[k] || 0) * grams / 100]));
+const RULE_NOTE = 'כוכב = 20 ג׳ חלבון / 10 ג׳ שומן / 20 ג׳ פחמימה · עד 0.3 כוכב לא נספר · 0.3–0.4 = רבע · מעל זה מעגלים לחצי כוכב';
+
 function amountSheet(f, meal, edit) {
-  const k = K(); let qty = edit ? edit.qty : 1;
+  const k = K();
+  const byWeight = f.p100 != null; // foods saved from a nutrition label are entered in grams
+  let qty = edit ? edit.qty : 1, grams = edit?.grams || f.g || 100;
+  const per100 = byWeight ? { p: f.p100, f: f.f100, c: f.c100 } : null;
   const s = k.sheet(f.name, `<div class="stack">
-      <p class="muted small">מנה: ${k.esc(f.serving || '—')}${f.note ? ` · ${k.esc(f.note)}` : ''}</p>
-      <div class="row between"><b style="font-weight:500">כמות מנות</b>
-        <div class="row"><button class="btn sm" data-q="-0.5">−</button><input class="input num" id="n-qty" type="number" inputmode="decimal" step="0.25" min="0" value="${qty}" style="width:80px;text-align:center"><button class="btn sm" data-q="0.5">+</button></div></div>
+      <p class="muted small">${byWeight ? `לפי התווית ל־100 גרם: חלבון ${fmt(per100.p)} · שומן ${fmt(per100.f)} · פחמימה ${fmt(per100.c)} ג׳` : `מנה: ${k.esc(f.serving || '—')}`}${f.note ? ` · ${k.esc(f.note)}` : ''}</p>
+      <div class="row between"><b style="font-weight:500">${byWeight ? 'כמה גרם' : 'כמות מנות'}</b>
+        <div class="row"><button class="btn sm" data-q="${byWeight ? -10 : -0.5}">−</button><input class="input num" id="n-qty" type="number" inputmode="decimal" step="${byWeight ? 5 : 0.25}" min="0" value="${byWeight ? grams : qty}" style="width:84px;text-align:center"><button class="btn sm" data-q="${byWeight ? 10 : 0.5}">+</button></div></div>
       <div class="card" id="n-prev"></div>
+      ${byWeight ? `<p class="note">${RULE_NOTE}</p>` : ''}
       <div class="chips">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
     </div>`, `<div class="row">${edit ? `<button class="btn danger" data-del>${k.ICON.trash}</button>` : ''}<button class="btn primary block grow" data-ok>${edit ? 'שמירה' : 'הוספה'}</button></div>`);
+  const stars = () => byWeight ? starsFromGrams(labelGrams(per100, grams)) : { p: f.p * qty, f: f.f * qty, c: f.c * qty };
   const prev = () => {
-    const st = { p: f.p * qty, f: f.f * qty, c: f.c * qty };
-    k.$('#n-prev', s.el).innerHTML = `<div class="nprev">${MAC.map(([m, name]) => `<div class="${m}"><span>${name}</span><b class="num">${fmt(st[m])} ★</b><small>${Math.round(gramsOf(m, st[m]))} ג׳</small></div>`).join('')}<div><span>קלוריות</span><b class="num">${k.kg(kcalOf(st))}</b><small>קק״ל</small></div></div>`;
+    const st = stars(), g = byWeight ? labelGrams(per100, grams) : null;
+    k.$('#n-prev', s.el).innerHTML = `<div class="nprev">${MAC.map(([m, name]) => `<div class="${m}"><span>${name}</span><b class="num">${fmt(st[m])} ★</b><small>${byWeight ? `${fmt(g[m])} ג׳ · <bdi dir="ltr">${exactStars(m, g[m]).toFixed(2)}</bdi>` : `${Math.round(gramsOf(m, st[m]))} ג׳`}</small></div>`).join('')}<div><span>קלוריות</span><b class="num">${k.kg(kcalOf(st))}</b><small>קק״ל</small></div></div>`;
   };
   const inp = k.$('#n-qty', s.el);
-  inp.oninput = () => { qty = Math.max(0, parseFloat(inp.value) || 0); prev(); };
-  k.$$('[data-q]', s.el).forEach(b => b.onclick = () => { qty = Math.max(0.25, r2(qty + +b.dataset.q)); inp.value = qty; prev(); });
+  inp.oninput = () => { const v = Math.max(0, parseFloat(inp.value) || 0); if (byWeight) grams = v; else qty = v; prev(); };
+  k.$$('[data-q]', s.el).forEach(b => b.onclick = () => {
+    if (byWeight) { grams = Math.max(5, Math.round(grams + +b.dataset.q)); inp.value = grams; }
+    else { qty = Math.max(0.25, r2(qty + +b.dataset.q)); inp.value = qty; }
+    prev();
+  });
   k.$$('[data-meal]', s.el).forEach(b => b.onclick = () => { meal = b.dataset.meal; k.$$('[data-meal]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)); });
   prev();
   k.$('[data-ok]', s.el).onclick = () => {
-    if (!qty) return k.toast('צריך כמות');
-    const n = N();
-    if (edit) Object.assign(edit, { qty, meal });
-    else n.log.push({ id: k.uid(), date: curDate, meal, name: f.name, serving: f.serving || '', qty, p: f.p || 0, f: f.f || 0, c: f.c || 0, at: Date.now() });
+    if (byWeight ? !grams : !qty) return k.toast('צריך כמות');
+    const n = N(), st = stars();
+    const fields = byWeight ? { qty: 1, ...st, serving: `${grams} גרם`, grams, p100: per100.p, f100: per100.f, c100: per100.c } : { qty };
+    if (edit) Object.assign(edit, fields, { meal });
+    else n.log.push({ id: k.uid(), date: curDate, meal, name: f.name, serving: f.serving || '', p: f.p || 0, f: f.f || 0, c: f.c || 0, ...fields, at: Date.now() });
     save(); s.close(); renderDay(); if (!edit) k.toast(`נוסף: ${f.name}`);
   };
   const del = k.$('[data-del]', s.el);
   if (del) del.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== edit.id); save(); s.close(); renderDay(); };
 }
-function entrySheet(e) { if (e) amountSheet({ name: e.name, serving: e.serving, p: e.p, f: e.f, c: e.c }, e.meal, e); }
+function entrySheet(e) {
+  if (!e) return;
+  amountSheet({ name: e.name, serving: e.serving, p: e.p, f: e.f, c: e.c, p100: e.p100, f100: e.f100, c100: e.c100, g: e.grams }, e.meal, e);
+}
 function manualSheet(meal) {
-  const k = K(), n = N(); let mode = 'stars';
+  const k = K(), n = N(); let mode = 'label';
   const s = k.sheet('הוספה ידנית', `<div class="stack">
-      <label class="field"><span>מה אכלת</span><input class="input" id="m-name" placeholder="למשל: שייק חלבון"></label>
-      <label class="field"><span>מנה (לא חובה)</span><input class="input" id="m-serv" placeholder="למשל: כוס, 200 גרם"></label>
-      <div class="seg" id="m-mode"><button data-mode="stars" aria-pressed="true">כוכבים</button><button data-mode="grams" aria-pressed="false">גרמים</button></div>
-      <div class="grid3">${MAC.map(([m, name]) => `<label class="field"><span>${name}</span><input class="input num" id="m-${m}" type="number" inputmode="decimal" step="0.25" min="0" placeholder="0" style="text-align:center"></label>`).join('')}</div>
-      <p class="note" id="m-hint"></p>
+      <label class="field"><span>מה אכלת</span><input class="input" id="m-name" placeholder="למשל: חטיף חלבון"></label>
+      <div class="seg" id="m-mode"><button data-mode="label" aria-pressed="true">מהתווית</button><button data-mode="grams" aria-pressed="false">גרמים במנה</button><button data-mode="stars" aria-pressed="false">כוכבים</button></div>
+      <p class="note" id="m-help"></p>
+      <div class="grid3">${MAC.map(([m, name]) => `<label class="field"><span>${name}</span><input class="input num" id="m-${m}" type="number" inputmode="decimal" step="0.1" min="0" placeholder="0" style="text-align:center"></label>`).join('')}</div>
+      <label class="field" id="m-g-wrap"><span>כמה גרם אכלת</span><input class="input num" id="m-g" type="number" inputmode="decimal" step="5" min="0" value="100" style="text-align:center"></label>
+      <label class="field" id="m-serv-wrap" hidden><span>מנה (לא חובה)</span><input class="input" id="m-serv" placeholder="למשל: כוס, 200 גרם"></label>
+      <div class="card" id="m-prev"></div>
+      <p class="note">${RULE_NOTE}</p>
       <label class="row"><span class="grow">לשמור במאגר שלי</span><span class="toggle"><input type="checkbox" id="m-keep" checked><span></span></span></label>
     </div>`, '<button class="btn primary block" data-ok>הוספה</button>');
-  const stars = () => Object.fromEntries(MAC.map(([m]) => { const v = parseFloat(k.$('#m-' + m, s.el).value) || 0; return [m, mode === 'stars' ? v : r2(v / n.grams[m])]; }));
-  const hint = () => { const st = stars(); k.$('#m-hint', s.el).textContent = mode === 'stars'
-    ? `≈ ${MAC.map(([m, name]) => `${name} ${Math.round(gramsOf(m, st[m]))} ג׳`).join(' · ')} · ${k.kg(kcalOf(st))} קק״ל`
-    : `≈ ${MAC.map(([m, name]) => `${name} ${fmt(st[m])} ★`).join(' · ')} · ${k.kg(kcalOf(st))} קק״ל`; };
-  k.$$('[data-mode]', s.el).forEach(b => b.onclick = () => { mode = b.dataset.mode; k.$$('[data-mode]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)); MAC.forEach(([m]) => { k.$('#m-' + m, s.el).step = mode === 'stars' ? '0.25' : '1'; }); hint(); });
-  MAC.forEach(([m]) => { k.$('#m-' + m, s.el).oninput = hint; }); hint();
+  const val = id => parseFloat(k.$(id, s.el).value) || 0;
+  const read = () => {
+    const v = Object.fromEntries(MAC.map(([m]) => [m, val('#m-' + m)]));
+    if (mode === 'stars') return { st: v, g: null };
+    const g = mode === 'label' ? labelGrams(v, val('#m-g')) : v;
+    return { st: starsFromGrams(g), g };
+  };
+  const draw = () => {
+    k.$('#m-help', s.el).textContent = { label: 'מהתווית התזונתית: כמה גרם חלבון, שומן ופחמימה יש ב־100 גרם. ואז כמה גרם אכלת.', grams: 'כמה גרם חלבון, שומן ופחמימה יש במנה שאכלת.', stars: 'כוכבים כמו שהמאמן/ת כותב/ת.' }[mode];
+    k.$('#m-g-wrap', s.el).hidden = mode !== 'label';
+    k.$('#m-serv-wrap', s.el).hidden = mode === 'label';
+    MAC.forEach(([m, name]) => { k.$('#m-' + m, s.el).step = mode === 'stars' ? '0.25' : '0.1'; k.$('#m-' + m, s.el).closest('label').querySelector('span').textContent = mode === 'label' ? `${name} ל־100 ג׳` : mode === 'grams' ? `${name} (ג׳)` : `${name} ★`; });
+    const { st, g } = read();
+    k.$('#m-prev', s.el).innerHTML = `<div class="nprev">${MAC.map(([m, name]) => `<div class="${m}"><span>${name}</span><b class="num">${fmt(st[m])} ★</b><small>${g ? `${fmt(g[m])} ג׳ · <bdi dir="ltr">${exactStars(m, g[m]).toFixed(2)}</bdi>` : `${Math.round(gramsOf(m, st[m]))} ג׳`}</small></div>`).join('')}<div><span>קלוריות</span><b class="num">${k.kg(kcalOf(st))}</b><small>קק״ל</small></div></div>`;
+  };
+  k.$$('[data-mode]', s.el).forEach(b => b.onclick = () => { mode = b.dataset.mode; k.$$('[data-mode]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)); draw(); });
+  k.$$('#m-p,#m-f,#m-c,#m-g', s.el).forEach(i => { i.oninput = draw; });
+  draw();
   setTimeout(() => k.$('#m-name', s.el).focus(), 320);
   k.$('[data-ok]', s.el).onclick = () => {
-    const name = k.$('#m-name', s.el).value.trim() || 'אוכל', serving = k.$('#m-serv', s.el).value.trim(), st = stars();
-    if (!st.p && !st.f && !st.c) return k.toast('צריך לפחות ערך אחד');
-    if (k.$('#m-keep', s.el).checked && !library().some(f => f.name === name)) n.foods.unshift({ id: 'u' + k.uid(), name, serving, ...st, note: '' });
-    n.log.push({ id: k.uid(), date: curDate, meal, name, serving, qty: 1, ...st, at: Date.now() });
+    const name = k.$('#m-name', s.el).value.trim() || 'אוכל', { st } = read();
+    const v = Object.fromEntries(MAC.map(([m]) => [m, val('#m-' + m)]));
+    if (!v.p && !v.f && !v.c) return k.toast('צריך לפחות ערך אחד');
+    const label = mode === 'label', grams = val('#m-g');
+    if (label && !grams) return k.toast('כמה גרם אכלת?');
+    const serving = label ? `${grams} גרם` : k.$('#m-serv', s.el).value.trim();
+    const per = label ? { p100: v.p, f100: v.f, c100: v.c } : {};
+    if (k.$('#m-keep', s.el).checked && !library().some(f => f.name === name))
+      n.foods.unshift({ id: 'u' + k.uid(), name, serving: label ? '100 גרם' : serving, ...(label ? starsFromGrams(labelGrams(v, 100)) : st), ...per, ...(label ? { g: grams } : {}), note: '' });
+    n.log.push({ id: k.uid(), date: curDate, meal, name, serving, qty: 1, ...st, ...per, ...(label ? { grams } : {}), at: Date.now() });
     save(); s.close(); renderDay(); k.toast(`נוסף: ${name}`);
   };
 }
