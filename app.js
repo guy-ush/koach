@@ -27,7 +27,7 @@ function normalize(d) {
   if (!settings.rm10) { if (!settings.rmTypes.map(Number).includes(10)) settings.rmTypes = [...settings.rmTypes, 10]; settings.rm10 = true; }
   settings.rmTypes = [...new Set(settings.rmTypes.map(Number))].sort((a, b) => a - b);
   const workouts = (d.workouts || []).map(w => ({ ...w, items: (w.items || []).map(i => ({ base: 1, ...i })) }));
-  return { tests: d.tests || [], workouts, settings };
+  return { tests: d.tests || [], workouts, settings, nutrition: d.nutrition || null };
 }
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) return normalize(JSON.parse(raw)); } catch (e) { /* fall through */ }
@@ -55,7 +55,7 @@ const mirror = (() => {
     get: () => { try { return tx('readonly', st => st.get('db')).then(v => v ? JSON.parse(v) : null).catch(() => null); } catch (e) { return Promise.resolve(null); } }
   };
 })();
-const hasData = d => d && ((d.tests || []).length || (d.workouts || []).length);
+const hasData = d => d && ((d.tests || []).length || (d.workouts || []).length || (d.nutrition?.log || []).length || (d.nutrition?.weights || []).length);
 async function recoverIfWiped() {
   if (hasData(db)) { mirror.put(db); return; }
   let src = await mirror.get();
@@ -181,10 +181,11 @@ function go(hash) { location.hash = hash; }
 function route() {
   const [, a = 'home', b] = (location.hash || '#/home').split('/');
   const tab = a === 'lift' ? 'home' : a === 'workout' ? 'workouts' : a;
+  const ft = $('#tabs [data-tab="food"]'); if (ft) ft.hidden = !db.nutrition?.on;
   $$('#tabs button').forEach(x => x.setAttribute('aria-current', x.dataset.tab === tab ? 'page' : 'false'));
   $('#fab').hidden = !(a === 'home' || a === 'workouts');
   ({ home: renderHome, lift: () => renderLift(b), workouts: renderWorkouts, workout: () => renderEditor(b),
-     progress: renderProgress, calc: renderCalc, settings: renderSettings }[a] || renderHome)();
+     progress: renderProgress, calc: renderCalc, settings: renderSettings, ...(window.KOACH_ROUTES || {}) }[a] || renderHome)();
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', route);
@@ -204,6 +205,7 @@ function renderHome() {
   view.innerHTML = `
     <div class="top"><div class="brand"><img src="icons/logo.png" alt="ZONE Strength Club"><div><h1>יומן כח-ZONE</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div></div>
     ${storageWarning()}${transferCard() || installCard()}
+    ${window.KOACH_HOOKS?.homeCard?.() || ''}
     <div class="lifts">${lifts().map(l => {
       // each lift shows the RM it actually tracks; others it also has go underneath
       const av = availBases(l.id), main = av[0] || RMS()[0], rest = av.slice(1);
@@ -224,7 +226,7 @@ function renderHome() {
   $$('[data-wk]').forEach(b => b.onclick = () => go('#/workout/' + b.dataset.wk));
   const all = $('[data-all]'); if (all) all.onclick = () => go('#/workouts');
   const bk = $('[data-backup]'); if (bk) bk.onclick = exportJSON;
-  bindInstall(); bindTransfer();
+  bindInstall(); bindTransfer(); window.KOACH_HOOKS?.bindHome?.();
 }
 function backupNag() {
   if (db.settings.drive.on && db.settings.drive.lastAt && Date.now() - db.settings.drive.lastAt < 7 * 864e5) return '';
@@ -578,6 +580,7 @@ function renderEditor(id) {
       ${!isNew ? `<div class="row"><button class="icon-btn" data-repeat aria-label="חזרה על האימון" title="חזרה על האימון">${ICON.copy}</button><button class="icon-btn" data-del aria-label="מחיקה" style="color:var(--over)">${ICON.trash}</button></div>` : ''}</div>
     <div class="stack">
       <label class="field"><span>תאריך</span><input class="input" type="date" id="w-date" value="${d.date}"></label>
+      ${window.KOACH_HOOKS?.dayLine?.(d.date) || ''}
       <div id="items" class="stack"></div>
       <div class="card addex-card"><h3 id="addex-title"></h3><div class="addex" id="addex"></div></div>
       <label class="field"><span>הערות</span><textarea class="input" id="w-note" placeholder="איך הרגיש, RPE, כאבים...">${esc(d.note)}</textarea></label>
@@ -795,6 +798,7 @@ function renderSettings() {
         ${standalone() ? '' : `<div class="li"><div class="grow"><div class="t">התקנה על הטלפון</div><div class="s">${installHow()}</div></div>${installEvt ? '<button class="btn sm primary" data-install>התקנה</button>' : ''}</div>`}
       </div>
 
+      ${window.KOACH_HOOKS?.settingsHTML?.() || ''}
       <div class="section-title" style="margin:8px 4px 0"><h2>תרגילים</h2><button class="btn sm" data-addlift>${ICON.plus} תרגיל</button></div>
       <div class="list">${st.lifts.map(l => `<div class="li" style="--lc:${l.color}"><i class="dot"></i><div class="grow"><div class="t" ${l.hidden ? 'style="opacity:.5"' : ''}>${esc(l.name)}</div></div>
         <button class="btn sm ghost" data-editlift="${l.id}">עריכה</button></div>`).join('')}</div>
@@ -830,6 +834,7 @@ function renderSettings() {
     </div>`;
   $('[data-share]').onclick = shareApp;
   bindTransfer();
+  window.KOACH_HOOKS?.bindSettings?.();
   bindInstall();
   $('[data-addlift]').onclick = () => liftSheet();
   $$('[data-editlift]').forEach(b => b.onclick = () => liftSheet(st.lifts.find(l => l.id === b.dataset.editlift)));
@@ -887,7 +892,7 @@ function addRmType() {
 }
 
 /* ---------- backups: file, daily on-device snapshots ---------- */
-const payload = () => ({ app: 'koach', version: 2, exported: new Date().toISOString(), tests: db.tests, workouts: db.workouts, settings: { ...db.settings, drive: undefined } });
+const payload = () => ({ app: 'koach', version: 2, exported: new Date().toISOString(), tests: db.tests, workouts: db.workouts, nutrition: db.nutrition, settings: { ...db.settings, drive: undefined } });
 function download(name, text, type) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
@@ -907,13 +912,13 @@ function restoreFrom(d) {
   if (!Array.isArray(d.tests) || !Array.isArray(d.workouts)) throw new Error('bad');
   snapshot(true); // keep what we had, just in case
   const keepDrive = db.settings.drive;
-  db = normalize({ tests: d.tests, workouts: d.workouts, settings: { ...(d.settings || {}), drive: keepDrive } });
+  db = normalize({ tests: d.tests, workouts: d.workouts, nutrition: d.nutrition !== undefined ? d.nutrition : db.nutrition, settings: { ...(d.settings || {}), drive: keepDrive } });
   save(); applyTheme(); route();
 }
 /* ---------- move data between Safari and the home-screen app (separate storage on iPhone) ---------- */
 const PFX = 'KOACH1:';
 function transferCode() {
-  const json = JSON.stringify({ tests: db.tests, workouts: db.workouts, settings: { lifts: db.settings.lifts, rmTypes: db.settings.rmTypes, round: db.settings.round } });
+  const json = JSON.stringify({ tests: db.tests, workouts: db.workouts, nutrition: db.nutrition, settings: { lifts: db.settings.lifts, rmTypes: db.settings.rmTypes, round: db.settings.round } });
   return PFX + btoa(unescape(encodeURIComponent(json)));
 }
 function parseTransfer(text) {
@@ -929,6 +934,15 @@ function mergeIn(d) {
   const byId = (a, b) => { const m = new Map(a.map(x => [x.id, x])); b.forEach(x => { if (!m.has(x.id)) m.set(x.id, x); }); return [...m.values()]; };
   const before = db.tests.length + db.workouts.length;
   db.tests = byId(db.tests, d.tests); db.workouts = byId(db.workouts, d.workouts);
+  if (d.nutrition) {
+    const mine = db.nutrition, empty = !mine || (!(mine.log || []).length && !(mine.weights || []).length && !mine.on);
+    if (empty) db.nutrition = d.nutrition; // nothing here yet: take everything, settings and targets included
+    else {
+      ['log', 'weights', 'foods'].forEach(k => { mine[k] = byId(mine[k] || [], d.nutrition[k] || []); });
+      mine.fav = [...new Set([...(mine.fav || []), ...(d.nutrition.fav || [])])];
+      if (!mine.on && d.nutrition.on) mine.on = true;
+    }
+  }
   const known = new Set(db.settings.lifts.map(l => l.id));
   (d.settings?.lifts || []).forEach(l => { if (!known.has(l.id)) db.settings.lifts.push(l); });
   db.settings.rmTypes = [...new Set([...db.settings.rmTypes, ...(d.settings?.rmTypes || [])])].sort((a, b) => a - b);
@@ -982,10 +996,11 @@ $('#file-json').onchange = async e => {
 };
 function snaps() { try { return JSON.parse(localStorage.getItem(SNAP_KEY)) || []; } catch (e) { return []; } }
 function snapshot(force) {
-  if (!db.tests.length && !db.workouts.length) return;
+  if (!hasData(db)) return;
   const list = snaps(), day = today();
-  if (!force && list[0] && list[0].day === day) list[0] = { day, at: Date.now(), data: { tests: db.tests, workouts: db.workouts } };
-  else list.unshift({ day, at: Date.now(), data: { tests: db.tests, workouts: db.workouts } });
+  const data = { tests: db.tests, workouts: db.workouts, nutrition: db.nutrition };
+  if (!force && list[0] && list[0].day === day) list[0] = { day, at: Date.now(), data };
+  else list.unshift({ day, at: Date.now(), data });
   try { localStorage.setItem(SNAP_KEY, JSON.stringify(list.slice(0, 14))); }
   catch (e) { try { localStorage.setItem(SNAP_KEY, JSON.stringify(list.slice(0, 3))); } catch (_) { /* full */ } }
 }
@@ -1046,7 +1061,7 @@ const drive = (() => {
     if (!init()) return Promise.reject(new Error('notready'));
     return new Promise((res, rej) => { pending = { res, rej }; client.requestAccessToken({ prompt: consent ? 'consent' : '' }); });
   }
-  const hash = () => { const s = JSON.stringify([db.tests, db.workouts, db.settings.lifts, db.settings.rmTypes]); let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0; return h.toString(36) + s.length; };
+  const hash = () => { const s = JSON.stringify([db.tests, db.workouts, db.settings.lifts, db.settings.rmTypes, db.nutrition]); let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0; return h.toString(36) + s.length; };
   async function api(t, url, opts = {}) {
     const r = await fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + t, ...(opts.headers || {}) } });
     if (r.status === 401) { localStorage.removeItem(TOKEN_KEY); throw new Error('auth'); }
@@ -1128,6 +1143,12 @@ function applyTheme() {
   const t = db.settings.theme;
   if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
 }
+
+/* ---------- shared with nutrition.js ---------- */
+window.KOACH = {
+  get db() { return db; }, save, route, go, $, $$, esc, kg, num, uid, today, toDate, fmtDate, fmtLong,
+  sheet, toast, confirmBox, ICON, sortedWorkouts, LIFT, plot
+};
 
 /* ---------- boot ---------- */
 recoverIfWiped();
