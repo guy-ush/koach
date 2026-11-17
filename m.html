@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>פתיחת מייל</title>
+<style>
+  body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#f7f3ea;color:#1f4d3a;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}
+  .box{text-align:center;padding:24px;max-width:340px}
+  a.btn{display:block;margin:12px 0;padding:14px;border-radius:12px;text-decoration:none;font-size:17px}
+  .app{background:#1f4d3a;color:#fff}
+  .web{background:#fff;color:#1f4d3a;border:1px solid #b8923a}
+  p{font-size:14px;color:#666}
+</style>
+</head>
+<body>
+<div class="box">
+  <h3>פותח את המייל…</h3>
+  <a id="app" class="btn app" href="#">פתח באפליקציית Gmail</a>
+  <a id="web" class="btn web" href="#">פתח בדפדפן</a>
+  <p id="msg"></p>
+</div>
+<script>
+  // Redirect helper for the morning brief: ?t=<Gmail thread id (hex)>
+  var t = (new URLSearchParams(location.search).get('t') || '').replace(/[^0-9a-fA-F]/g, '');
+  var web = 'https://mail.google.com/mail/u/0/#all/' + t;
+  var app = 'googlegmail:///cv=' + t + '/accountId=1&create-new-tab';
+  document.getElementById('web').href = web;
+  document.getElementById('app').href = app;
+  var ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  var mobile = ios || /Android/i.test(navigator.userAgent);
+  if (!t) {
+    document.getElementById('msg').textContent = 'חסר מזהה מייל בקישור.';
+  } else if (ios) {
+    location.href = app;
+  } else if (!mobile) {
+    location.replace(web);
+  }
+</script>
+</body>
+</html>
