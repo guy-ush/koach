@@ -825,6 +825,7 @@ function renderSettings() {
         <button class="li" data-copy><div class="grow"><div class="t">העתקת הנתונים</div><div class="s">להעברה מספארי לאפליקציה במסך הבית, או לטלפון אחר</div></div>${ICON.chev}</button>
         <button class="li" data-paste><div class="grow"><div class="t">הדבקת נתונים</div><div class="s">מוסיף את מה שהועתק, בלי למחוק את מה שכבר כאן</div></div>${ICON.chev}</button>
         <button class="li" data-exp><div class="grow"><div class="t">שמירת גיבוי לקובץ</div><div class="s">${st.lastBackup ? 'אחרון: ' + new Date(st.lastBackup).toLocaleDateString('he-IL') : 'לשמירה בדרייב, בקבצים או במייל'}</div></div>${ICON.chev}</button>
+        <button class="li" data-addfile><div class="grow"><div class="t">הוספת נתונים מקובץ</div><div class="s">מוסיף לנתונים הקיימים בלי למחוק (למשל יומן תזונה מיובא)</div></div>${ICON.chev}</button>
         <button class="li" data-imp><div class="grow"><div class="t">שחזור מקובץ גיבוי</div><div class="s">מחליף את הנתונים הנוכחיים</div></div>${ICON.chev}</button>
         <button class="li" data-snaps><div class="grow"><div class="t">עותקים יומיים במכשיר</div><div class="s">${snaps().length} עותקים</div></div>${ICON.chev}</button>
         <button class="li" data-csv><div class="grow"><div class="t">ייצוא לאקסל (CSV)</div><div class="s">RM ואימונים</div></div>${ICON.chev}</button>
@@ -851,7 +852,8 @@ function renderSettings() {
   const dn = $('[data-drive-now]'); if (dn) dn.onclick = () => drive.backup(true, true);
   const drs = $('[data-drive-restore]'); if (drs) drs.onclick = () => drive.restore();
   $('[data-exp]').onclick = exportJSON;
-  $('[data-imp]').onclick = () => $('#file-json').click();
+  $('[data-imp]').onclick = () => { fileMode = 'restore'; $('#file-json').click(); };
+  $('[data-addfile]').onclick = () => { fileMode = 'merge'; $('#file-json').click(); };
   $('[data-snaps]').onclick = snapsSheet;
   $('[data-csv]').onclick = exportCSV;
   $('[data-wipe]').onclick = async () => { if (await confirmBox('למחוק את כל בדיקות ה־RM והאימונים? אי אפשר לבטל.', 'מחיקת הכל')) { db = normalize({ settings: db.settings }); save(); toast('נמחק'); renderSettings(); } };
@@ -932,7 +934,7 @@ function parseTransfer(text) {
 function mergeIn(d) {
   snapshot(true);
   const byId = (a, b) => { const m = new Map(a.map(x => [x.id, x])); b.forEach(x => { if (!m.has(x.id)) m.set(x.id, x); }); return [...m.values()]; };
-  const before = db.tests.length + db.workouts.length;
+  const before = db.tests.length + db.workouts.length + (db.nutrition?.log?.length || 0) + (db.nutrition?.weights?.length || 0);
   db.tests = byId(db.tests, d.tests); db.workouts = byId(db.workouts, d.workouts);
   if (d.nutrition) {
     const mine = db.nutrition, empty = !mine || (!(mine.log || []).length && !(mine.weights || []).length && !mine.on);
@@ -947,7 +949,7 @@ function mergeIn(d) {
   (d.settings?.lifts || []).forEach(l => { if (!known.has(l.id)) db.settings.lifts.push(l); });
   db.settings.rmTypes = [...new Set([...db.settings.rmTypes, ...(d.settings?.rmTypes || [])])].sort((a, b) => a - b);
   save();
-  return db.tests.length + db.workouts.length - before;
+  return db.tests.length + db.workouts.length + (db.nutrition?.log?.length || 0) + (db.nutrition?.weights?.length || 0) - before;
 }
 async function copyTransfer() {
   if (!hasData(db)) return toast('אין עדיין נתונים להעתיק');
@@ -985,11 +987,18 @@ function bindTransfer() {
   const p = $('[data-paste]'); if (p) p.onclick = pasteTransfer;
   const d = $('[data-tdismiss]'); if (d) d.onclick = () => { db.settings.transferDismissed = true; save(); route(); };
 }
+let fileMode = 'restore';
 $('#file-json').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try {
     const d = JSON.parse(await f.text());
     if (!Array.isArray(d.tests) || !Array.isArray(d.workouts)) throw new Error();
+    if (fileMode === 'merge') {
+      const parts = [d.workouts.length && `${d.workouts.length} אימונים`, d.tests.length && `${d.tests.length} בדיקות RM`, d.nutrition?.log?.length && `${d.nutrition.log.length} רישומי תזונה`, d.nutrition?.weights?.length && `${d.nutrition.weights.length} שקילות`].filter(Boolean);
+      if (!await confirmBox(`להוסיף מהקובץ: ${parts.join(', ') || 'אין נתונים'}? מה שכבר קיים נשאר, ורשומות שכבר יובאו לא יוכפלו.`, 'הוספה', false)) return;
+      const n = mergeIn(d); route(); toast(n ? `נוספו ${n} רשומות ✓` : 'הכל כבר היה כאן');
+      return;
+    }
     if (!await confirmBox(`לשחזר ${d.tests.length} בדיקות RM ו־${d.workouts.length} אימונים? הנתונים הנוכחיים יוחלפו.`, 'שחזור')) return;
     restoreFrom(d); toast('שוחזר בהצלחה');
   } catch (_) { toast('הקובץ לא תקין'); }
