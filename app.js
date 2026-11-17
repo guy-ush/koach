@@ -678,6 +678,7 @@ function drawItems() {
       </div>
       ${lastLine(it)}
       ${it.sets.map((s, si) => setRow(s, si, it)).join('')}
+      <div class="cmp" data-cmp>${compareLine(it)}</div>
       <div class="ex-foot"><button class="btn sm" data-addset>${ICON.plus} סט</button>${it.sets.length ? '<button class="btn sm ghost" data-dupset>שכפל אחרון</button>' : ''}</div>
     </div>`;
   }).join('');
@@ -721,8 +722,9 @@ function drawItems() {
     $$('.set', ex).forEach(row => {
       const s = it.sets[+row.dataset.si];
       const upd = () => { row.querySelector('.calc').innerHTML = calcLine(s, it); };
-      $('[data-reps]', row).oninput = e => { s.reps = parseInt(e.target.value) || null; };
-      $('[data-val]', row).oninput = e => { const v = num(e.target.value); if (s.pct != null) s.pct = v ?? 0; else s.weight = v; upd(); };
+      const cmp = () => { const c = ex.querySelector('[data-cmp]'); if (c) c.innerHTML = compareLine(it); };
+      $('[data-reps]', row).oninput = e => { s.reps = parseInt(e.target.value) || null; cmp(); };
+      $('[data-val]', row).oninput = e => { const v = num(e.target.value); if (s.pct != null) s.pct = v ?? 0; else s.weight = v; upd(); cmp(); };
       $('[data-unit]', row).onclick = () => {
         if (s.pct == null && !it.base) {
           const av = availBases(it.lift);
@@ -758,6 +760,33 @@ function summarizeWithPct(sets) {
     else g.push({ n: 1, reps: x.reps, weight: x.weight, pct: x.pct ?? null });
   });
   return g.map(x => `${x.n}×${x.reps} @ ${x.pct != null ? `${kg(x.pct)}% (${kg(x.weight)})` : kg(x.weight)}`).join(' · ');
+}
+/* Session comparison for one exercise: is this better than last time?
+   volume = sum of kg x reps; strength = best set's estimated 1RM (Epley: kg x (1 + reps/30));
+   intensity = average kg per set. Verdict: stronger best set, or clearly more work without a weaker
+   best set, is progress; both lower is a drop; otherwise about the same. */
+function sessionStats(sets) {
+  const ok = sets.filter(x => x.reps > 0 && x.weight > 0);
+  if (!ok.length) return null;
+  return {
+    vol: ok.reduce((a, x) => a + x.weight * x.reps, 0),
+    e1: Math.max(...ok.map(x => e1rm(x.weight, x.reps))),
+    avg: ok.reduce((a, x) => a + x.weight, 0) / ok.length,
+    reps: ok.reduce((a, x) => a + x.reps, 0), n: ok.length
+  };
+}
+function compareLine(it) {
+  const lt = lastTime(it.lift); if (!lt) return '';
+  const cur = sessionStats(it.sets.map(x => ({ reps: x.reps, weight: setWeight(x, it.lift, draft.date, it.base) })));
+  const prev = sessionStats(lt.sets);
+  if (!cur || !prev) return '';
+  const pc = (a, b) => b ? (a - b) / b * 100 : 0;
+  const dV = pc(cur.vol, prev.vol), dE = pc(cur.e1, prev.e1), dA = pc(cur.avg, prev.avg);
+  const verdict = (dE >= 2 && dV > -15) || (dV >= 5 && dE > -2) ? ['up', '▲ התקדמות']
+    : (dE <= -2 && dV <= 0) || (dV <= -10 && dE < 2) ? ['down', '▼ ירידה'] : ['same', '= דומה'];
+  const cell = (label, val, d, unit = '') => `<div><span>${label}</span><b class="num">${kg(Math.round(val * 10) / 10)}${unit}</b><small class="${d >= 1 ? 'up' : d <= -1 ? 'down' : ''}"><bdi dir="ltr">${d >= 0 ? '+' : ''}${Math.round(d)}%</bdi></small></div>`;
+  return `<div class="cmp-h"><span>לעומת ${fmtDate(lt.date)}</span><b class="cmp-v ${verdict[0]}">${verdict[1]}</b></div>
+    <div class="cmp-g">${cell('נפח', cur.vol, dV)}${cell('1RM משוער', cur.e1, dE)}${cell('משקל ממוצע', cur.avg, dA)}</div>`;
 }
 function lastLine(it) {
   const lt = lastTime(it.lift);
