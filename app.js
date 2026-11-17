@@ -110,6 +110,7 @@ const ICON = {
   trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  dumbbell: '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>',
   share: '<svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>'
 };
 
@@ -208,11 +209,58 @@ function spark(points) {
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline vector-effect="non-scaling-stroke" points="${points.map((p, i) => `${px(xs[i]).toFixed(1)},${py(ys[i]).toFixed(1)}`).join(' ')}"/></svg>`;
 }
 function renderHome() {
-  const n = db.workouts.length, last = sortedWorkouts()[0];
+  const H = window.KOACH_HOOKS || {}, nOn = !!db.nutrition?.on, t = today();
+  const ws = sortedWorkouts(), n = ws.length, last = ws[0];
+  const todayWs = ws.filter(w => w.date === t);
+  const train = nOn && H.isTrain ? H.isTrain(t) : todayWs.length > 0;
+  // today: training side
+  const lastTxt = last ? (() => { const d = daysAgo(last.date); return d <= 0 ? 'היום' : d === 1 ? 'אתמול' : `לפני ${d} ימים`; })() : '';
+  const trainSide = todayWs.length
+    ? `<div class="tt-h">${ICON.dumbbell}<b>האימון של היום</b></div>${todayWs.map(w => `<button class="tt-wk" data-wk="${w.id}">${w.items.map(i => `<div class="line" style="--lc:${LIFT(i.lift).color}"><i class="dot"></i><span>${esc(LIFT(i.lift).name)}</span><span class="sets">${summarizeSets(i.sets)}</span></div>`).join('')}</button>`).join('')}`
+    : `<div class="tt-h">${ICON.dumbbell}<b>אימון</b></div><p class="muted small">עוד לא נרשם אימון היום${last ? `<br>האחרון: ${lastTxt}` : ''}</p><button class="btn sm primary" data-newwk>${ICON.plus} אימון</button>`;
+  // this week, Sunday to Saturday
+  const ws0 = weekStart(t), days = [];
+  for (let i = 0; i < 7; i++) { const d = toDate(ws0); d.setDate(d.getDate() + i); days.push(d.toISOString().slice(0, 10)); }
+  const weekW = ws.filter(w => w.date >= ws0 && w.date <= days[6]);
+  const strip = days.map((d, i) => {
+    const wd = ws.some(w => w.date === d), st = nOn && H.dayStats ? H.dayStats(d) : null, fut = d > t;
+    let ring = '';
+    if (st && st.logged && st.tk) {
+      const r = 13, c = 2 * Math.PI * r, f = Math.min(st.kcal / st.tk, 1), cls = st.kcal > st.tk * 1.1 ? 'over' : st.kcal >= st.tk * .9 ? 'ok' : 'under';
+      ring = `<svg class="wk-ring" viewBox="0 0 32 32"><circle cx="16" cy="16" r="${r}" class="trk"/><circle cx="16" cy="16" r="${r}" class="bar ${cls}" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 16 16)"/></svg>`;
+    } else ring = `<svg class="wk-ring" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" class="trk ${fut ? 'fut' : ''}"/></svg>`;
+    return `<button class="wd ${d === t ? 'today' : ''} ${fut ? 'fut' : ''}" data-day="${d}" ${fut ? 'disabled' : ''}>
+      <span class="wd-l">${['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'][i]}</span>
+      <span class="wd-r">${ring}<span class="wd-n">${toDate(d).getDate()}</span></span>
+      <span class="wd-t">${wd ? ICON.dumbbell : ''}</span></button>`;
+  }).join('');
+  // streak of consecutive training weeks (same rule as the workouts dashboard)
+  const weekSet = new Set(ws.map(w => weekStart(w.date)));
+  let streak = 0; const sd = toDate(ws0); if (!weekSet.has(ws0)) sd.setDate(sd.getDate() - 7);
+  while (weekSet.has(sd.toISOString().slice(0, 10))) { streak++; sd.setDate(sd.getDate() - 7); }
+  const avgK = nOn && H.avgKcal ? H.avgKcal(7) : null, wt = nOn && H.weightNow ? H.weightNow() : null;
   view.innerHTML = `
-    <div class="top"><div class="brand"><img src="icons/logo.png" alt="ZONE Strength Club"><div><h1>יומן כח-ZONE</h1><p class="muted small">${n ? `${n} אימונים · אחרון ${fmtDate(last.date)}` : 'מתחילים: הוסף RM לכל תרגיל'}</p></div></div></div>
+    <div class="top"><div class="brand"><img src="icons/logo.png" alt="ZONE Strength Club"><div><h1>יומן כח-ZONE</h1><p class="muted small">${fmtLong(t)}</p></div></div></div>
     ${storageWarning()}${transferCard() || installCard()}
-    ${window.KOACH_HOOKS?.homeCard?.() || ''}
+    <div class="card today-card">
+      <div class="row between" style="margin-bottom:10px"><b class="tc-title">היום</b><span class="daychip ${train ? 'train' : ''}">${train ? `${ICON.dumbbell} יום אימון` : 'יום מנוחה'}</span></div>
+      <div class="today-grid ${nOn ? 'two' : ''}">
+        <div class="today-train">${trainSide}</div>
+        ${nOn && H.todayHTML ? `<button class="today-food" data-food>${H.todayHTML()}</button>` : ''}
+      </div>
+    </div>
+    <div class="card week-card">
+      <div class="row between"><b>השבוע שלי</b><span class="muted small">${weekW.length} אימונים${nOn ? ' · טבעת = קלוריות' : ''}</span></div>
+      <div class="week-strip">${strip}</div>
+    </div>
+    <div class="tiles home-tiles">
+      <div class="stat"><b class="num">${weekW.length}</b><span>אימונים השבוע</span></div>
+      <div class="stat"><b class="num">${streak}</b><span>${streak === 1 ? 'שבוע ברצף' : 'שבועות ברצף'}</span></div>
+      ${nOn ? `<div class="stat"><b class="num">${avgK != null ? kg(avgK) : '—'}</b><span>קק״ל ממוצע</span></div>
+      <div class="stat"><b class="num">${wt ? kg(wt.kg) : '—'}</b><span>${wt && wt.d != null ? `משקל <bdi dir="ltr">${wt.d > 0 ? '+' : ''}${kg(wt.d)}</bdi>` : 'משקל גוף'}</span></div>`
+      : `<div class="stat"><b class="num">${n}</b><span>סה״כ אימונים</span></div><div class="stat"><b class="num">${db.tests.length}</b><span>בדיקות RM</span></div>`}
+    </div>
+    <div class="section-title"><h2>התרגילים שלי</h2></div>
     <div class="lifts">${lifts().map(l => {
       // each lift shows the RM it actually tracks; others it also has go underneath
       const av = availBases(l.id), main = av[0] || RMS()[0], rest = av.slice(1);
@@ -226,14 +274,21 @@ function renderHome() {
       </button>`;
     }).join('')}</div>
     <div class="section-title"><h2>אימונים אחרונים</h2>${n ? '<button class="btn ghost sm" data-all>הכל</button>' : ''}</div>
-    ${n ? `<div class="list">${sortedWorkouts().slice(0, 3).map(workoutRow).join('')}</div>`
+    ${n ? `<div class="list">${ws.slice(0, 2).map(workoutRow).join('')}</div>`
         : `<div class="list"><div class="empty">עוד לא נרשמו אימונים.<br>לחץ על ＋ כדי לתעד אימון.</div></div>`}
     ${backupNag()}`;
   $$('[data-lift]').forEach(b => b.onclick = () => go('#/lift/' + b.dataset.lift));
   $$('[data-wk]').forEach(b => b.onclick = () => go('#/workout/' + b.dataset.wk));
+  const nw = $('[data-newwk]'); if (nw) nw.onclick = () => go('#/workout/new');
+  const fd = $('[data-food]'); if (fd) fd.onclick = () => H.goDay?.(t);
+  $$('[data-day]').forEach(b => b.onclick = () => {
+    const d = b.dataset.day;
+    if (nOn && H.goDay) return H.goDay(d);
+    const w = ws.find(x => x.date === d); if (w) go('#/workout/' + w.id); else toast('אין אימון ביום הזה');
+  });
   const all = $('[data-all]'); if (all) all.onclick = () => go('#/workouts');
   const bk = $('[data-backup]'); if (bk) bk.onclick = exportJSON;
-  bindInstall(); bindTransfer(); window.KOACH_HOOKS?.bindHome?.();
+  bindInstall(); bindTransfer();
 }
 function backupNag() {
   if (db.settings.drive.on && db.settings.drive.lastAt && Date.now() - db.settings.drive.lastAt < 7 * 864e5) return '';
@@ -297,7 +352,7 @@ function renderLift(id) {
   const b = baseRM(id, tableBase);
   const dashes = ['', '6 5', '2 4', '10 4 2 4', '1 3'];
   view.innerHTML = `
-    <button class="back" data-back>${ICON.back} תרגילים</button>
+    <button class="back" data-back>${ICON.back} בית</button>
     <div class="top" style="--lc:${l.color}"><div><h1>${esc(l.name)}</h1></div></div>
     <div class="hero" style="--n:${RMS().length + 1}">
       ${RMS().map(r => { const t = latest(id, r); return `<div class="stat"><b class="num">${t ? kg(t.weight) : '—'}</b><span>${r}RM</span><em>${t ? fmtDate(t.date) : ''}</em></div>`; }).join('')}

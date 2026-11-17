@@ -381,8 +381,31 @@ function dayLine(date) {
 }
 
 window.KOACH_ROUTES = { food: render };
+/* ---------- for the combined home page ---------- */
+function dayStats(date) {
+  const es = entriesOn(date), tot = totals(es), tg = targetFor(date);
+  return { logged: es.length > 0, kcal: kcalOf(tot), tk: kcalOf(tg), tot, tg, train: isTrain(date) };
+}
+function avgKcal(days) {
+  const t = K().today(), v = [];
+  for (let i = 0; i < days; i++) { const d = addDays(t, -i), es = entriesOn(d); if (es.length) v.push(kcalOf(totals(es))); }
+  return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+}
+function weightNow() {
+  const ws = [...N().weights].sort((a, b) => a.date.localeCompare(b.date)); if (!ws.length) return null;
+  const last = ws[ws.length - 1], since = addDays(K().today(), -30), base = ws.find(w => w.date >= since) || ws[0];
+  return { kg: last.kg, d: base !== last ? r2(last.kg - base.kg) : null };
+}
+function todayHTML() {
+  const k = K(), d = k.today(), st = dayStats(d), rem = st.tk - st.kcal;
+  return `<div class="tt-h">${ICO.fork}<b>תזונה</b></div>
+    <div class="tf-row"><div class="nring-wrap sm">${ring(st.kcal, st.tk, 84)}<div class="nring-val"><b class="num">${k.kg(Math.abs(rem))}</b><span>${rem >= 0 ? 'נשארו' : 'מעל'}</span></div></div>
+      <div class="tf-macros">${MAC.map(([m, name]) => `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s"><bdi dir="ltr"><b class="num">${fmt(st.tot[m])}</b>/${fmt(st.tg[m])}</bdi></span></div><div class="nbar"><i style="width:${(st.tg[m] ? Math.min(100, st.tot[m] / st.tg[m] * 100) : 0).toFixed(1)}%"></i></div></div>`).join('')}</div></div>`;
+}
+function goDay(date) { curDate = date; sub = 'day'; K().go('#/food'); if (location.hash === '#/food') render(); }
+
 // from the home screen's "+ אוכל": today's log with the add sheet open for the current meal
 function quickAddFood() { curDate = K().today(); sub = 'day'; K().go('#/food'); setTimeout(() => addSheet(mealNow()), 60); }
 
-window.KOACH_HOOKS = { homeCard, bindHome, dayLine, settingsHTML, bindSettings, quickAddFood };
+window.KOACH_HOOKS = { homeCard, bindHome, dayLine, settingsHTML, bindSettings, quickAddFood, dayStats, avgKcal, weightNow, todayHTML, goDay, isTrain };
 })();
