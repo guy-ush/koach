@@ -356,13 +356,14 @@ function renderLift(id) {
     <div class="top" style="--lc:${l.color}"><div><h1>${esc(l.name)}</h1></div></div>
     <div class="hero" style="--n:${RMS().length + 1}">
       ${RMS().map(r => { const t = latest(id, r); return `<div class="stat"><b class="num">${t ? kg(t.weight) : '—'}</b><span>${r}RM</span><em>${t ? fmtDate(t.date) : ''}</em></div>`; }).join('')}
-      <div class="stat"><b class="num">${best.e ? kg(Math.round(best.e * 2) / 2) : '—'}</b><span>1RM משוערך מאימון</span><em>${best.e ? `${best.set.reps}×${kg(best.set.weight)}` : ''}</em></div>
+      <div class="stat"><b class="num">${best.e ? kg(Math.round(best.e * 2) / 2) : '—'}</b><span>שיא מאימון (לפי סט)</span><em>${best.e ? `${best.set.reps}×${kg(best.set.weight)}` : ''}</em></div>
     </div>
+    ${best.e ? '<p class="note" style="margin:6px 2px 0">שיא מאימון: 1RM מחושב מהסט הכבד ביותר שרשמת באימונים, לא מבדיקה. לכן הוא יכול לצאת נמוך מה־RM שבדקת.</p>' : ''}
     <div class="section-title"><h2>התקדמות</h2></div>
     <div class="card chart-card" style="--lc:${l.color}">
       <div class="seg" style="margin-bottom:10px">${[['3m', '3 חו׳'], ['6m', '6 חו׳'], ['1y', 'שנה'], ['all', 'הכל']].map(([k, t]) => `<button data-range="${k}" aria-pressed="${range === k}">${t}</button>`).join('')}</div>
       <div class="chart" id="chart"></div>
-      <div class="legend">${RMS().map((r, i) => `<span><svg class="lg" viewBox="0 0 18 4"><line x1="1" y1="2" x2="17" y2="2" stroke="${l.color}" stroke-width="2.5" stroke-linecap="round" ${dashes[i % dashes.length] ? `stroke-dasharray="${dashes[i % dashes.length]}"` : ''} opacity="${i ? .75 : 1}"/></svg>${r}RM</span>`).join('')}<span><i class="pt"></i>משוערך מאימונים</span></div>
+      <div class="legend">${RMS().map((r, i) => `<span><svg class="lg" viewBox="0 0 18 4"><line x1="1" y1="2" x2="17" y2="2" stroke="${l.color}" stroke-width="2.5" stroke-linecap="round" ${dashes[i % dashes.length] ? `stroke-dasharray="${dashes[i % dashes.length]}"` : ''} opacity="${i ? .75 : 1}"/></svg>${r}RM</span>`).join('')}<span><i class="pt"></i>שיא מאימונים (לפי סט)</span></div>
     </div>
     <div class="section-title"><h2>בדיקות RM</h2><button class="btn sm primary" data-add>${ICON.plus} RM חדש</button></div>
     ${rmList(id)}
@@ -414,7 +415,7 @@ function drawChart(id) {
   const series = RMS().map(r => testsFor(id, r).filter(t => t.date >= from).map(t => ({ d: t.date, v: t.weight })));
   const st = bestTraining(id).filter(t => t.date >= from).map(t => ({ d: t.date, v: Math.round(t.e * 10) / 10 }));
   plot(box, LIFT(id).color, [
-    { pts: st, r: 4, op: .35, lbl: 'משוערך · ', noLine: true },
+    { pts: st, r: 4, op: .35, lbl: 'שיא מאימון · ', noLine: true },
     ...series.map((s, i) => ({ pts: s, i, r: i ? 3.5 : 4.5, op: i ? .8 : 1, ring: true, lbl: RMS()[i] + 'RM · ' })).reverse()
   ]);
 }
