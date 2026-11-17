@@ -473,3 +473,7 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .wd-t,:root:not([data-theme="light"]) .tt-h svg{color:var(--ink)}}
 .home-tiles{margin-top:10px}
 @media (max-width:360px){.today-grid.two{grid-template-columns:1fr}}
+
+#undo-bar{position:fixed;z-index:65;inset-inline:12px;bottom:calc(var(--tabs-h) + env(safe-area-inset-bottom) + 12px);max-width:536px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:10px 10px 10px 16px;border-radius:14px;background:var(--ink);color:var(--bg);font-size:14.5px;box-shadow:0 10px 30px rgba(0,0,0,.25);transform:translateY(160%);transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+#undo-bar.show{transform:none}
+#undo-bar .btn{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 40%,transparent);font-weight:500}

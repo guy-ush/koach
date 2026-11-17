@@ -122,9 +122,24 @@ function renderDay() {
   k.$$('[data-entry]').forEach(b => b.onclick = () => entrySheet(n.log.find(e => e.id === b.dataset.entry)));
   k.$$('[data-copy]').forEach(b => b.onclick = () => {
     const meal = b.dataset.copy;
-    entriesOn(addDays(curDate, -1)).filter(e => e.meal === meal).forEach(e => n.log.push({ ...e, id: k.uid(), date: curDate, at: Date.now() }));
-    save(); renderDay(); k.toast(`הועתק מאתמול: ${meal}`);
+    const added = entriesOn(addDays(curDate, -1)).filter(e => e.meal === meal).map(e => ({ ...e, id: k.uid(), date: curDate, at: Date.now() }));
+    n.log.push(...added); save(); renderDay();
+    undoBar(`הועתקו ${added.length} פריטים מאתמול ל${meal}`, () => {
+      const ids = new Set(added.map(e => e.id)); n.log = n.log.filter(e => !ids.has(e.id)); save(); if (location.hash === '#/food') renderDay();
+    });
   });
+}
+
+// a short bar with an undo button (e.g. after "כמו אתמול")
+let undoT;
+function undoBar(msg, onUndo) {
+  const k = K(); document.getElementById('undo-bar')?.remove(); clearTimeout(undoT);
+  const bar = document.createElement('div'); bar.id = 'undo-bar'; bar.setAttribute('role', 'status');
+  bar.innerHTML = `<span class="grow">${k.esc(msg)}</span><button class="btn sm" data-undo>ביטול</button>`;
+  document.body.appendChild(bar); requestAnimationFrame(() => bar.classList.add('show'));
+  const close = () => { bar.classList.remove('show'); setTimeout(() => bar.remove(), 300); };
+  bar.querySelector('[data-undo]').onclick = () => { onUndo(); close(); k.toast('בוטל'); };
+  undoT = setTimeout(close, 7000);
 }
 
 /* add food: search, recent, favourites, library, manual */
