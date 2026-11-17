@@ -20,7 +20,7 @@ function N() {
   if (!db.nutrition) db.nutrition = {};
   const n = db.nutrition;
   const def = { on: false, grams: { p: 20, f: 10, c: 20 }, target: { p: 4, f: 3, c: 5 }, cTrain: null, cRest: null,
-    meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null };
+    meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null, plan: {} };
   for (const k in def) if (n[k] === undefined || n[k] === null && def[k] !== null) n[k] = def[k];
   return n;
 }
@@ -32,10 +32,28 @@ const kcalOf = st => Math.round(MAC.reduce((a, [k]) => a + gramsOf(k, st[k] || 0
 const addDays = (iso, n) => { const d = K().toDate(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const workoutsOn = date => K().db.workouts.filter(w => w.date === date);
 const isTrain = date => { const t = N().dayType[date]; return t ? t === 'train' : workoutsOn(date).length > 0; };
-function targetFor(date) {
-  const n = N(), t = n.target, tr = isTrain(date);
-  return { p: +t.p || 0, f: +t.f || 0, c: tr ? (n.cTrain ?? +t.c ?? 0) : (n.cRest ?? +t.c ?? 0) };
+/* Coach's day-by-day plan (Lulik's table): carbs change daily, fat is usually fixed, protein is a
+   minimum ("4+") or a range ("4-5"); some days carry only a note ("להשתדל להקפיד על החלבון", "חופשה"). */
+function parseProtein(txt) {
+  const t = String(txt ?? '').trim().replace(/\s/g, '');
+  if (!t) return null;
+  let m = t.match(/^(\d+(?:\.\d+)?)\+$/); if (m) return { p: +m[1], plus: true };
+  m = t.match(/^(\d+(?:\.\d+)?)[-–](\d+(?:\.\d+)?)$/); if (m) return { p: +m[1], pMax: +m[2] };
+  m = t.match(/^(\d+(?:\.\d+)?)$/); if (m) return { p: +m[1] };
+  return null;
 }
+const proteinText = e => e.plus ? `${fmt(e.p)}+` : e.pMax != null ? `${fmt(e.p)}-${fmt(e.pMax)}` : (e.p != null ? fmt(e.p) : '');
+const planOn = date => N().plan[date] || null;
+const hasNumbers = e => e && (e.c != null || e.f != null || e.p != null);
+function targetFor(date) {
+  const n = N(), t = n.target, tr = isTrain(date), pl = planOn(date);
+  const base = { p: +t.p || 0, f: +t.f || 0, c: tr ? (n.cTrain ?? +t.c ?? 0) : (n.cRest ?? +t.c ?? 0) };
+  if (hasNumbers(pl)) return { p: pl.p ?? base.p, f: pl.f ?? base.f, c: pl.c ?? base.c, plus: !!pl.plus, pMax: pl.pMax ?? null, note: pl.note || '', src: 'plan' };
+  return { ...base, note: pl?.note || '', src: pl ? 'note' : 'default' };
+}
+// target as the coach writes it, and whether eating above it counts as "over"
+const targetText = (m, tg) => m === 'p' ? proteinText(tg) : fmt(tg[m]);
+const isOver = (m, e, tg) => m === 'p' ? (tg.plus ? false : e > (tg.pMax ?? tg.p) + .01) : (tg[m] && e > tg[m] + .01);
 const entriesOn = date => N().log.filter(e => e.date === date);
 function totals(list) {
   const t = { p: 0, f: 0, c: 0 };
@@ -79,10 +97,10 @@ function render() {
   view.innerHTML = `
     <div class="top"><div><h1>תזונה</h1><p class="muted small">כוכבים · גרמים · קלוריות</p></div>
       ${n.claudeUrl ? `<a class="btn sm" href="${k.esc(n.claudeUrl)}" target="_blank" rel="noopener">${ICO.cam} צילום ב־Claude</a>` : ''}</div>
-    <div class="seg" style="margin-bottom:14px">${[['day', 'יומן'], ['stats', 'התקדמות'], ['weight', 'משקל גוף']].map(([v, t]) => `<button data-sub="${v}" aria-pressed="${sub === v}">${t}</button>`).join('')}</div>
+    <div class="seg" style="margin-bottom:14px">${[['day', 'יומן'], ['plan', 'יעדים'], ['stats', 'התקדמות'], ['weight', 'משקל']].map(([v, t]) => `<button data-sub="${v}" aria-pressed="${sub === v}">${t}</button>`).join('')}</div>
     <div id="nbody"></div>`;
   k.$$('[data-sub]').forEach(b => b.onclick = () => { sub = b.dataset.sub; render(); });
-  ({ day: renderDay, stats: renderStats, weight: renderWeight })[sub]();
+  ({ day: renderDay, plan: renderPlan, stats: renderStats, weight: renderWeight })[sub]();
 }
 
 function renderDay() {
@@ -95,11 +113,12 @@ function renderDay() {
       <button class="d" data-today>${dayLabel(curDate)}<small>${k.fmtDate(curDate)}</small></button>
       <button class="icon-btn" data-d="1" aria-label="יום הבא" style="transform:scaleX(-1)" ${curDate >= k.today() ? 'disabled' : ''}>${k.ICON.back}</button></div>
     <button class="daytype ${tr ? 'train' : ''}" data-daytype>${tr ? `${ICO.bar} יום אימון${woNames.length ? ` · ${k.esc(woNames.join(', '))}` : ''}` : 'יום מנוחה'}<small>${n.dayType[curDate] ? 'נקבע ידנית · ' : ''}לחץ לשינוי</small></button>
+    ${tg.src !== 'default' ? `<div class="plan-src">${tg.src === 'plan' ? '<b>יעד מלוליק</b>' : '<b>הערה מלוליק</b>'}${tg.note ? ` · ${k.esc(tg.note)}` : ''}</div>` : ''}
     <div class="card nsum">
       <div class="nring-wrap">${ring(eatK, tgK)}<div class="nring-val"><b class="num">${k.kg(Math.abs(rem))}</b><span>${rem >= 0 ? 'נשארו' : 'מעל היעד'}</span><small><bdi dir="ltr">${k.kg(eatK)} / ${k.kg(tgK)}</bdi> קק״ל</small></div></div>
       <div class="nmacros">${MAC.map(([m, name]) => {
-        const e = tot[m], t = tg[m], pct = t ? Math.min(100, e / t * 100) : 0, over = t && e > t + .01;
-        return `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s ${over ? 'over' : ''}"><bdi dir="ltr"><b class="num">${fmt(e)}</b>/${fmt(t)}</bdi> ★</span></div>
+        const e = tot[m], t = tg[m], pct = t ? Math.min(100, e / t * 100) : 0, over = isOver(m, e, tg);
+        return `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s ${over ? 'over' : ''}"><bdi dir="ltr"><b class="num">${fmt(e)}</b>/${targetText(m, tg)}</bdi> ★</span></div>
           <div class="nbar"><i style="width:${pct.toFixed(1)}%"></i></div><div class="nm-g"><bdi dir="ltr">${Math.round(gramsOf(m, e))} / ${Math.round(gramsOf(m, t))}</bdi> ג׳</div></div>`;
       }).join('')}</div>
     </div>
@@ -279,6 +298,91 @@ function manualSheet(meal) {
     n.log.push({ id: k.uid(), date: curDate, meal, name, serving, qty: 1, ...st, ...per, ...(label ? { grams } : {}), at: Date.now() });
     save(); s.close(); renderDay(); k.toast(`נוסף: ${name}`);
   };
+}
+
+/* coach's targets: list + entering a new table */
+const DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+const dowOf = iso => DOW[K().toDate(iso).getDay()];
+function renderPlan() {
+  const k = K(), n = N(), box = document.getElementById('nbody'), t = k.today();
+  const dates = Object.keys(n.plan).sort();
+  const upcoming = dates.filter(d => d >= addDays(t, -3)), past = dates.filter(d => d < addDays(t, -3)).reverse();
+  const row = d => { const e = n.plan[d]; return `<button class="li plan-row ${d === t ? 'today' : ''}" data-pd="${d}"><span class="pr-d"><b>${dowOf(d)}</b>${k.fmtDate(d)}</span>
+      ${hasNumbers(e) ? `<span class="pr-v"><i class="c">${e.c != null ? fmt(e.c) : '–'}</i><i class="f">${e.f != null ? fmt(e.f) : '–'}</i><i class="p"><bdi dir="ltr">${proteinText(e) || '–'}</bdi></i></span>` : ''}
+      <span class="pr-n grow">${k.esc(e.note || '')}</span>${k.ICON.chev}</button>`; };
+  box.innerHTML = `
+    <button class="btn primary block" data-newplan>${k.ICON.plus} טבלת יעדים חדשה מלוליק</button>
+    <p class="note" style="margin:8px 4px 0">ביום שיש לו יעד מהטבלה, היומן משתמש בו. בשאר הימים: היעד מההגדרות.</p>
+    ${dates.length ? `<div class="pr-head"><span></span><span class="pr-v"><i>פחמימה</i><i>שומן</i><i>חלבון</i></span></div>` : ''}
+    ${upcoming.length ? `<div class="section-title"><h2>עכשיו והלאה</h2></div><div class="list">${upcoming.map(row).join('')}</div>` : ''}
+    ${past.length ? `<div class="section-title"><h2>קודם</h2><span class="muted small">${past.length} ימים</span></div><div class="list">${past.slice(0, 60).map(row).join('')}</div>` : ''}
+    ${!dates.length ? '<div class="list" style="margin-top:12px"><div class="empty">עוד אין טבלת יעדים.<br>מזינים את הטבלה מלוליק, יום אחרי יום.</div></div>' : ''}`;
+  k.$('[data-newplan]').onclick = () => tableSheet();
+  k.$$('[data-pd]').forEach(b => b.onclick = () => dayPlanSheet(b.dataset.pd));
+}
+function planRowFields(d, e, i) {
+  return `<div class="pt-row" data-row="${i}"><span class="pt-d"><b>${dowOf(d)}</b>${K().fmtDate(d).slice(0, -3)}</span>
+    <input class="input num" data-c type="number" inputmode="decimal" step="0.5" placeholder="–" value="${e?.c ?? ''}">
+    <input class="input num" data-f type="number" inputmode="decimal" step="0.5" placeholder="–" value="${e?.f ?? ''}">
+    <input class="input num" data-p inputmode="text" placeholder="4+" value="${e ? proteinText(e) : ''}">
+    <input class="input pt-note" data-note placeholder="הערה" value="${K().esc(e?.note || '')}"></div>`;
+}
+function tableSheet() {
+  const k = K(), n = N();
+  let start = k.today(); const td = k.toDate(start); if (td.getDay() !== 0) { td.setDate(td.getDate() + (7 - td.getDay())); start = td.toISOString().slice(0, 10); }
+  // fat and protein are usually the same all period: start every row from the last table's values (or 3 / 4+)
+  const lastPl = Object.keys(n.plan).sort().reverse().map(d => n.plan[d]).find(hasNumbers);
+  const dflt = { f: lastPl?.f ?? 3, p: lastPl?.p ?? 4, plus: lastPl ? !!lastPl.plus : true, pMax: lastPl?.pMax ?? null };
+  let rows = Array.from({ length: 7 }, () => ({ c: null, ...dflt, note: '' }));
+  const s = k.sheet('טבלת יעדים מלוליק', `<div class="stack">
+      <label class="field"><span>יום ראשון בטבלה</span><input class="input" type="date" id="pt-start" value="${start}"></label>
+      <p class="note">שורה לכל יום, כמו בדף. חלבון: „4+” (לפחות 4) או „4-5”. יום בלי מספרים, רק הערה, גם בסדר („להשתדל להקפיד על החלבון”, „חופשה”). שורה חדשה מעתיקה את השומן והחלבון מהשורה הקודמת.</p>
+      <div class="pt-head"><span></span><span>פחמימה</span><span>שומן</span><span>חלבון</span><span>הערה</span></div>
+      <div id="pt-rows"></div>
+      <button class="btn sm" data-addrow>${k.ICON.plus} יום</button>
+    </div>`, '<button class="btn primary block" data-ok>שמירת הטבלה</button>');
+  s.el.classList.add('full');
+  const readRows = () => k.$$('.pt-row', s.el).map(r => {
+    const num = sel => { const v = parseFloat(r.querySelector(sel).value); return isNaN(v) ? null : v; };
+    const pr = parseProtein(r.querySelector('[data-p]').value);
+    return { c: num('[data-c]'), f: num('[data-f]'), p: pr?.p ?? null, plus: !!pr?.plus, pMax: pr?.pMax ?? null, note: r.querySelector('[data-note]').value.trim() };
+  });
+  const draw = () => {
+    const st = k.$('#pt-start', s.el).value || k.today();
+    k.$('#pt-rows', s.el).innerHTML = rows.map((e, i) => planRowFields(addDays(st, i), e, i)).join('');
+    // ditto: typing in a row fills empty fat / protein below it, like the coach's ″ marks
+    k.$$('.pt-row', s.el).forEach((r, i) => ['[data-f]', '[data-p]'].forEach(sel => r.querySelector(sel).addEventListener('change', () => {
+      rows = readRows(); const v = r.querySelector(sel).value;
+      k.$$('.pt-row', s.el).slice(i + 1).forEach(x => { const inp = x.querySelector(sel); if (!inp.value && v) inp.value = v; });
+      rows = readRows();
+    })));
+  };
+  draw();
+  k.$('#pt-start', s.el).onchange = () => { rows = readRows(); draw(); };
+  k.$('[data-addrow]', s.el).onclick = () => { rows = readRows(); const last = rows[rows.length - 1] || {}; rows.push({ c: null, f: last.f ?? null, p: last.p ?? null, plus: last.plus, pMax: last.pMax ?? null, note: '' }); draw(); };
+  k.$('[data-ok]', s.el).onclick = async () => {
+    rows = readRows(); const st = k.$('#pt-start', s.el).value; if (!st) return k.toast('צריך תאריך התחלה');
+    const entries = rows.map((e, i) => [addDays(st, i), e]).filter(([, e]) => hasNumbers(e) || e.note);
+    if (!entries.length) return k.toast('הטבלה ריקה');
+    const clash = entries.filter(([d]) => n.plan[d]).length;
+    if (clash && !await k.confirmBox(`ל־${clash} מהימים כבר יש יעד. להחליף?`, 'החלפה', false)) return;
+    entries.forEach(([d, e]) => { const o = { note: e.note || '' }; ['c', 'f', 'p', 'pMax'].forEach(x => { if (e[x] != null) o[x] = e[x]; }); if (e.plus) o.plus = true; n.plan[d] = o; });
+    save(); s.close(); renderPlan(); k.toast(`נשמרו יעדים ל־${entries.length} ימים`);
+  };
+}
+function dayPlanSheet(d) {
+  const k = K(), n = N(), e = n.plan[d];
+  const s = k.sheet(`יעד ל${dowOf(d)} ${k.fmtDate(d)}`, `<div class="stack"><div class="pt-head"><span></span><span>פחמימה</span><span>שומן</span><span>חלבון</span><span>הערה</span></div>${planRowFields(d, e, 0)}</div>`,
+    `<div class="row"><button class="btn danger" data-del>${k.ICON.trash}</button><button class="btn primary block grow" data-ok>שמירה</button></div>`);
+  k.$('[data-ok]', s.el).onclick = () => {
+    const r = k.$('.pt-row', s.el), num = sel => { const v = parseFloat(r.querySelector(sel).value); return isNaN(v) ? null : v; }, pr = parseProtein(r.querySelector('[data-p]').value);
+    const o = { note: r.querySelector('[data-note]').value.trim() };
+    if (num('[data-c]') != null) o.c = num('[data-c]'); if (num('[data-f]') != null) o.f = num('[data-f]');
+    if (pr) { o.p = pr.p; if (pr.plus) o.plus = true; if (pr.pMax != null) o.pMax = pr.pMax; }
+    if (!hasNumbers(o) && !o.note) delete n.plan[d]; else n.plan[d] = o;
+    save(); s.close(); renderPlan();
+  };
+  k.$('[data-del]', s.el).onclick = () => { delete n.plan[d]; save(); s.close(); renderPlan(); };
 }
 
 /* progress: calories per day vs target, macro adherence, training vs rest days */
@@ -466,7 +570,7 @@ function todayHTML() {
   const k = K(), d = k.today(), st = dayStats(d), rem = st.tk - st.kcal;
   return `<div class="tt-h">${ICO.fork}<b>תזונה</b></div>
     <div class="tf-row"><div class="nring-wrap sm">${ring(st.kcal, st.tk, 84)}<div class="nring-val"><b class="num">${k.kg(Math.abs(rem))}</b><span>${rem >= 0 ? 'נשארו' : 'מעל'}</span></div></div>
-      <div class="tf-macros">${MAC.map(([m, name]) => `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s"><bdi dir="ltr"><b class="num">${fmt(st.tot[m])}</b>/${fmt(st.tg[m])}</bdi></span></div><div class="nbar"><i style="width:${(st.tg[m] ? Math.min(100, st.tot[m] / st.tg[m] * 100) : 0).toFixed(1)}%"></i></div></div>`).join('')}</div></div>`;
+      <div class="tf-macros">${MAC.map(([m, name]) => `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s"><bdi dir="ltr"><b class="num">${fmt(st.tot[m])}</b>/${targetText(m, st.tg)}</bdi></span></div><div class="nbar"><i style="width:${(st.tg[m] ? Math.min(100, st.tot[m] / st.tg[m] * 100) : 0).toFixed(1)}%"></i></div></div>`).join('')}</div></div>`;
 }
 function goDay(date) { curDate = date; sub = 'day'; K().go('#/food'); if (location.hash === '#/food') render(); }
 
