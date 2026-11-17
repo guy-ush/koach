@@ -417,3 +417,11 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .nadv summary{cursor:pointer;color:var(--muted);font-size:14px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 @media (max-width:360px){.nsum{flex-direction:column}.nmacros{width:100%}}
+
+/* two labelled floating buttons on home (workout + food) */
+.fab.pill{width:auto;height:52px;padding:0 18px 0 16px;border-radius:18px;display:flex;align-items:center;gap:6px;font-size:15.5px;font-weight:500}
+.fab.pill svg{width:22px;height:22px}
+.fab.food{bottom:calc(var(--tabs-h) + env(safe-area-inset-bottom) + 18px + 62px);background:var(--surface);color:var(--ink);border:1.5px solid var(--accent);box-shadow:0 8px 22px rgba(0,0,0,.14)}
+.fab.food svg{color:var(--accent)}
+:root[data-theme="dark"] .fab.food svg{color:var(--ink)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fab.food svg{color:var(--ink)}}

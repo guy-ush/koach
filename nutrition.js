@@ -381,5 +381,8 @@ function dayLine(date) {
 }
 
 window.KOACH_ROUTES = { food: render };
-window.KOACH_HOOKS = { homeCard, bindHome, dayLine, settingsHTML, bindSettings };
+// from the home screen's "+ אוכל": today's log with the add sheet open for the current meal
+function quickAddFood() { curDate = K().today(); sub = 'day'; K().go('#/food'); setTimeout(() => addSheet(mealNow()), 60); }
+
+window.KOACH_HOOKS = { homeCard, bindHome, dayLine, settingsHTML, bindSettings, quickAddFood };
 })();

@@ -179,11 +179,17 @@ const rmSeg = (attr, current, extra = '', list = RMS()) => list.length < 2 ? '' 
 const view = $('#view');
 function go(hash) { location.hash = hash; }
 function route() {
+  $('#sheet-root').innerHTML = ''; // a screen change (e.g. Android back) closes any open sheet
   const [, a = 'home', b] = (location.hash || '#/home').split('/');
   const tab = a === 'lift' ? 'home' : a === 'workout' ? 'workouts' : a;
   const ft = $('#tabs [data-tab="food"]'); if (ft) ft.hidden = !db.nutrition?.on;
   $$('#tabs button').forEach(x => x.setAttribute('aria-current', x.dataset.tab === tab ? 'page' : 'false'));
   $('#fab').hidden = !(a === 'home' || a === 'workouts');
+  // home with nutrition on: two labelled buttons, one for a workout and one for food
+  const two = a === 'home' && !!db.nutrition?.on, fab = $('#fab');
+  $('#fab-food').hidden = !two;
+  fab.classList.toggle('pill', two);
+  fab.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>${two ? '<span>אימון</span>' : ''}`;
   ({ home: renderHome, lift: () => renderLift(b), workouts: renderWorkouts, workout: () => renderEditor(b),
      progress: renderProgress, calc: renderCalc, settings: renderSettings, ...(window.KOACH_ROUTES || {}) }[a] || renderHome)();
   window.scrollTo(0, 0);
@@ -191,6 +197,7 @@ function route() {
 window.addEventListener('hashchange', route);
 $$('#tabs button').forEach(b => b.onclick = () => go('#/' + b.dataset.tab));
 $('#fab').onclick = () => go('#/workout/new');
+$('#fab-food').onclick = () => window.KOACH_HOOKS?.quickAddFood?.();
 
 /* ---------- home ---------- */
 function spark(points) {
