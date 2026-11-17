@@ -511,3 +511,8 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .pt-row .pt-note{text-align:start;font-size:13px}
 .pt-d{display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--muted);line-height:1.2}
 .pt-d b{font-size:14px;color:var(--ink);font-weight:500}
+
+.coach{padding:14px}
+.coach b{font-weight:500}
+.coach-why{background:var(--accent-soft);border-radius:12px;padding:10px 12px;font-size:13.5px;display:flex;flex-direction:column;gap:4px}
+.coach-why p{margin:0}

@@ -20,7 +20,7 @@ function N() {
   if (!db.nutrition) db.nutrition = {};
   const n = db.nutrition;
   const def = { on: false, grams: { p: 20, f: 10, c: 20 }, target: { p: 4, f: 3, c: 5 }, cTrain: null, cRest: null,
-    meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null, plan: {} };
+    meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null, plan: {}, coach: { goal: 'lose', strength: [1, 5], avg: null, last: null } };
   for (const k in def) if (n[k] === undefined || n[k] === null && def[k] !== null) n[k] = def[k];
   return n;
 }
@@ -48,7 +48,10 @@ const hasNumbers = e => e && (e.c != null || e.f != null || e.p != null);
 function targetFor(date) {
   const n = N(), t = n.target, tr = isTrain(date), pl = planOn(date);
   const base = { p: +t.p || 0, f: +t.f || 0, c: tr ? (n.cTrain ?? +t.c ?? 0) : (n.cRest ?? +t.c ?? 0) };
-  if (hasNumbers(pl)) return { p: pl.p ?? base.p, f: pl.f ?? base.f, c: pl.c ?? base.c, plus: !!pl.plus, pMax: pl.pMax ?? null, note: pl.note || '', src: 'plan' };
+  if (hasNumbers(pl)) {
+    const aero = pl.aero && pl.c != null && isTrain(date);
+    return { p: pl.p ?? base.p, f: pl.f ?? base.f, c: (pl.c ?? base.c) + (aero ? 1 : 0), plus: !!pl.plus, pMax: pl.pMax ?? null, note: (pl.note || '') + (aero ? ' · אירובי היום: +1 פחמימה' : ''), src: 'plan' };
+  }
   return { ...base, note: pl?.note || '', src: pl ? 'note' : 'default' };
 }
 // target as the coach writes it, and whether eating above it counts as "over"
@@ -113,7 +116,7 @@ function renderDay() {
       <button class="d" data-today>${dayLabel(curDate)}<small>${k.fmtDate(curDate)}</small></button>
       <button class="icon-btn" data-d="1" aria-label="יום הבא" style="transform:scaleX(-1)" ${curDate >= k.today() ? 'disabled' : ''}>${k.ICON.back}</button></div>
     <button class="daytype ${tr ? 'train' : ''}" data-daytype>${tr ? `${ICO.bar} יום אימון${woNames.length ? ` · ${k.esc(woNames.join(', '))}` : ''}` : 'יום מנוחה'}<small>${n.dayType[curDate] ? 'נקבע ידנית · ' : ''}לחץ לשינוי</small></button>
-    ${tg.src !== 'default' ? `<div class="plan-src">${tg.src === 'plan' ? '<b>יעד מלוליק</b>' : '<b>הערה מלוליק</b>'}${tg.note ? ` · ${k.esc(tg.note)}` : ''}</div>` : ''}
+    ${tg.src !== 'default' ? `<div class="plan-src">${tg.src === 'plan' ? '<b>יעד מהתוכנית</b>' : '<b>הערה מהתוכנית</b>'}${tg.note ? ` · ${k.esc(tg.note)}` : ''}</div>` : ''}
     <div class="card nsum">
       <div class="nring-wrap">${ring(eatK, tgK)}<div class="nring-val"><b class="num">${k.kg(Math.abs(rem))}</b><span>${rem >= 0 ? 'נשארו' : 'מעל היעד'}</span><small><bdi dir="ltr">${k.kg(eatK)} / ${k.kg(tgK)}</bdi> קק״ל</small></div></div>
       <div class="nmacros">${MAC.map(([m, name]) => {
@@ -311,13 +314,15 @@ function renderPlan() {
       ${hasNumbers(e) ? `<span class="pr-v"><i class="c">${e.c != null ? fmt(e.c) : '–'}</i><i class="f">${e.f != null ? fmt(e.f) : '–'}</i><i class="p"><bdi dir="ltr">${proteinText(e) || '–'}</bdi></i></span>` : ''}
       <span class="pr-n grow">${k.esc(e.note || '')}</span>${k.ICON.chev}</button>`; };
   box.innerHTML = `
-    <button class="btn primary block" data-newplan>${k.ICON.plus} טבלת יעדים חדשה מלוליק</button>
+    ${coachCard()}
+    <button class="btn block" data-newplan style="margin-top:10px">${k.ICON.plus} טבלה ידנית</button>
     <p class="note" style="margin:8px 4px 0">ביום שיש לו יעד מהטבלה, היומן משתמש בו. בשאר הימים: היעד מההגדרות.</p>
     ${dates.length ? `<div class="pr-head"><span></span><span class="pr-v"><i>פחמימה</i><i>שומן</i><i>חלבון</i></span></div>` : ''}
     ${upcoming.length ? `<div class="section-title"><h2>עכשיו והלאה</h2></div><div class="list">${upcoming.map(row).join('')}</div>` : ''}
     ${past.length ? `<div class="section-title"><h2>קודם</h2><span class="muted small">${past.length} ימים</span></div><div class="list">${past.slice(0, 60).map(row).join('')}</div>` : ''}
     ${!dates.length ? '<div class="list" style="margin-top:12px"><div class="empty">עוד אין טבלת יעדים.<br>מזינים את הטבלה מלוליק, יום אחרי יום.</div></div>' : ''}`;
   k.$('[data-newplan]').onclick = () => tableSheet();
+  bindCoach(renderPlan);
   k.$$('[data-pd]').forEach(b => b.onclick = () => dayPlanSheet(b.dataset.pd));
 }
 function planRowFields(d, e, i) {
@@ -327,14 +332,16 @@ function planRowFields(d, e, i) {
     <input class="input num" data-p inputmode="text" placeholder="4+" value="${e ? proteinText(e) : ''}">
     <input class="input pt-note" data-note placeholder="הערה" value="${K().esc(e?.note || '')}"></div>`;
 }
-function tableSheet() {
+const nextSunday = () => { const k = K(); let st = k.today(); const td = k.toDate(st); if (td.getDay() !== 0) { td.setDate(td.getDate() + (7 - td.getDay())); st = td.toISOString().slice(0, 10); } return st; };
+function tableSheet(pre) {
   const k = K(), n = N();
-  let start = k.today(); const td = k.toDate(start); if (td.getDay() !== 0) { td.setDate(td.getDate() + (7 - td.getDay())); start = td.toISOString().slice(0, 10); }
+  let start = pre?.start || nextSunday();
   // fat and protein are usually the same all period: start every row from the last table's values (or 3 / 4+)
   const lastPl = Object.keys(n.plan).sort().reverse().map(d => n.plan[d]).find(hasNumbers);
   const dflt = { f: lastPl?.f ?? 3, p: lastPl?.p ?? 4, plus: lastPl ? !!lastPl.plus : true, pMax: lastPl?.pMax ?? null };
-  let rows = Array.from({ length: 7 }, () => ({ c: null, ...dflt, note: '' }));
-  const s = k.sheet('טבלת יעדים מלוליק', `<div class="stack">
+  let rows = pre?.rows ? pre.rows.map(r => ({ ...r })) : Array.from({ length: 7 }, () => ({ c: null, ...dflt, note: '' }));
+  const s = k.sheet(pre?.title || 'טבלת יעדים', `<div class="stack">
+      ${pre?.reason ? `<div class="coach-why">${pre.reason}</div>` : ''}
       <label class="field"><span>יום ראשון בטבלה</span><input class="input" type="date" id="pt-start" value="${start}"></label>
       <p class="note">שורה לכל יום, כמו בדף. חלבון: „4+” (לפחות 4) או „4-5”. יום בלי מספרים, רק הערה, גם בסדר („להשתדל להקפיד על החלבון”, „חופשה”). שורה חדשה מעתיקה את השומן והחלבון מהשורה הקודמת.</p>
       <div class="pt-head"><span></span><span>פחמימה</span><span>שומן</span><span>חלבון</span><span>הערה</span></div>
@@ -345,7 +352,7 @@ function tableSheet() {
   const readRows = () => k.$$('.pt-row', s.el).map(r => {
     const num = sel => { const v = parseFloat(r.querySelector(sel).value); return isNaN(v) ? null : v; };
     const pr = parseProtein(r.querySelector('[data-p]').value);
-    return { c: num('[data-c]'), f: num('[data-f]'), p: pr?.p ?? null, plus: !!pr?.plus, pMax: pr?.pMax ?? null, note: r.querySelector('[data-note]').value.trim() };
+    return { c: num('[data-c]'), f: num('[data-f]'), p: pr?.p ?? null, plus: !!pr?.plus, pMax: pr?.pMax ?? null, note: r.querySelector('[data-note]').value.trim(), aero: !!rows[+r.dataset.row]?.aero };
   });
   const draw = () => {
     const st = k.$('#pt-start', s.el).value || k.today();
@@ -366,7 +373,8 @@ function tableSheet() {
     if (!entries.length) return k.toast('הטבלה ריקה');
     const clash = entries.filter(([d]) => n.plan[d]).length;
     if (clash && !await k.confirmBox(`ל־${clash} מהימים כבר יש יעד. להחליף?`, 'החלפה', false)) return;
-    entries.forEach(([d, e]) => { const o = { note: e.note || '' }; ['c', 'f', 'p', 'pMax'].forEach(x => { if (e[x] != null) o[x] = e[x]; }); if (e.plus) o.plus = true; n.plan[d] = o; });
+    entries.forEach(([d, e]) => { const o = { note: e.note || '' }; ['c', 'f', 'p', 'pMax'].forEach(x => { if (e[x] != null) o[x] = e[x]; }); if (e.plus) o.plus = true; if (e.aero) o.aero = true; n.plan[d] = o; });
+    if (pre?.coach) { const cs = entries.map(([, e]) => e.c).filter(v => v != null); n.coach.avg = cs.length ? r2(cs.reduce((a, b) => a + b, 0) / cs.length) : n.coach.avg; n.coach.last = st; n.coach.lastAvg = pre.coach.avg; }
     save(); s.close(); renderPlan(); k.toast(`נשמרו יעדים ל־${entries.length} ימים`);
   };
 }
@@ -383,6 +391,81 @@ function dayPlanSheet(d) {
     save(); s.close(); renderPlan();
   };
   k.$('[data-del]', s.el).onclick = () => { delete n.plan[d]; save(); s.close(); renderPlan(); };
+}
+
+/* ---------- the coach: builds next week's table from the principles of the previous coach's plans ----------
+   fat 3 stars, protein at least 4 every day; carbs cycle by day (strength days highest, the day after a bit
+   higher, other days lower, never under 3); the weekly carb average steps down gradually while losing fat,
+   steered by the body-weight trend; with too little data it holds steady rather than guessing. */
+const DOW_FULL = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+function weightRate() { // % of body weight per week, from the last 4 weeks of weigh-ins
+  const ws = [...N().weights].sort((a, b) => a.date.localeCompare(b.date)).filter(w => w.date >= addDays(K().today(), -28));
+  if (ws.length < 2) return null;
+  const a = ws[0], b = ws[ws.length - 1], days = (K().toDate(b.date) - K().toDate(a.date)) / 864e5;
+  if (days < 7) return null;
+  return { pct: (b.kg - a.kg) / a.kg * 100 / days * 7, kg: b.kg - a.kg, days: Math.round(days), from: a.kg, to: b.kg };
+}
+function recentCarbs(days) {
+  const t = K().today(), v = [];
+  for (let i = 1; i <= days; i++) { const es = entriesOn(addDays(t, -i)); if (es.length) v.push(totals(es).c); }
+  return { n: v.length, avg: v.length ? v.reduce((a, b) => a + b, 0) / v.length : null };
+}
+const half = v => Math.round(v * 2) / 2;
+function coachWeek() {
+  const n = N(), c = n.coach, why = [], start = nextSunday();
+  const rc = recentCarbs(14), wr = weightRate();
+  let avg = c.avg, step = 0;
+  if (avg == null) { // first week: start a little under what is actually being eaten
+    const lastPlan = Object.keys(n.plan).sort().reverse().map(d => n.plan[d]).filter(e => e.c != null).slice(0, 7).map(e => e.c);
+    if (rc.avg != null) { avg = rc.avg - (c.goal === 'lose' ? 0.5 : c.goal === 'gain' ? -0.5 : 0); why.push(`נקודת התחלה: בשבועיים האחרונים אכלת בממוצע ${fmt(Math.round(rc.avg * 10) / 10)} כוכבי פחמימה ביום.${c.goal === 'lose' ? ' מתחילים חצי כוכב מתחת.' : ''}`); }
+    else if (lastPlan.length) { avg = lastPlan.reduce((a, b) => a + b, 0) / lastPlan.length; why.push('נקודת התחלה: הממוצע בטבלה האחרונה.'); }
+    else { avg = +n.target.c || 5; why.push('נקודת התחלה: היעד מההגדרות.'); }
+  } else {
+    why.push(`בשבוע הקודם: ממוצע ${fmt(avg)} כוכבי פחמימה ביום.`);
+    if (rc.n < 7) why.push(`רק ${rc.n} ימים מתועדים בשבועיים האחרונים: אין מספיק נתונים, הממוצע נשאר.`);
+    else if (!wr) {
+      if (c.goal === 'lose' && c.last && K().toDate(start) - K().toDate(c.last) >= 13 * 864e5) { step = -0.25; why.push('אין מספיק שקילות למגמה: מורידים רבע כוכב בזהירות. כדאי להישקל פעם בשבוע.'); }
+      else why.push('אין מספיק שקילות למגמה: הממוצע נשאר. כדאי להישקל פעם בשבוע (לשונית משקל).');
+    } else {
+      const r = wr.pct, txt = `המשקל ${wr.kg <= 0 ? 'ירד' : 'עלה'} ${fmt(Math.abs(r2(wr.kg)))} ק״ג ב־${wr.days} ימים (${r >= 0 ? '+' : ''}${fmt(r2(r))}% בשבוע).`;
+      if (c.goal === 'lose') step = r > -0.25 ? -0.5 : r < -1 ? 0.5 : 0;
+      else if (c.goal === 'keep') step = r < -0.25 ? 0.5 : r > 0.25 ? -0.5 : 0;
+      else step = r < 0.1 ? 0.5 : r > 0.75 ? -0.5 : 0;
+      why.push(txt + ' ' + (step < 0 ? 'מורידים חצי כוכב בממוצע.' : step > 0 ? 'מעלים חצי כוכב בממוצע.' : 'בקצב טוב: הממוצע נשאר.'));
+    }
+  }
+  avg = Math.min(10, Math.max(3.5, half((avg ?? 5) + step)));
+  // spread over the week: strength days highest, the day after a bit higher, other days lower
+  const str = new Set(c.strength || []), w = [];
+  for (let i = 0; i < 7; i++) { const dw = (K().toDate(start).getDay() + i) % 7; w.push(str.has(dw) ? 1.5 : str.has((dw + 6) % 7) ? 0.5 : -0.75); }
+  const mean = w.reduce((a, b) => a + b, 0) / 7;
+  let cs = w.map(x => Math.max(3, half(avg + x - mean)));
+  // keep the weekly total on target after rounding: adjust the lowest/highest flexible days by half-stars
+  let diff = half(avg * 7 - cs.reduce((a, b) => a + b, 0)), guard = 20;
+  while (Math.abs(diff) >= 0.5 && guard--) {
+    const idx = cs.map((v, i) => [v, i]).filter(([v, i]) => diff > 0 ? true : v > 3).sort((a, b) => diff > 0 ? a[0] - b[0] : b[0] - a[0])[0]?.[1];
+    if (idx == null) break; cs[idx] += diff > 0 ? 0.5 : -0.5; diff += diff > 0 ? -0.5 : 0.5;
+  }
+  const rows = cs.map((v, i) => { const dw = (K().toDate(start).getDay() + i) % 7; const isS = str.has(dw), after = str.has((dw + 6) % 7);
+    return { c: v, f: 3, p: 4, plus: true, pMax: null, note: isS ? 'יום כוח' : after ? 'אחרי כוח' : 'אירובי? +1', aero: !isS }; });
+  why.push(`השבוע: ממוצע ${fmt(avg)} כוכבי פחמימה ביום. שומן 3, חלבון לפחות 4 בכל יום. בימי ${[...str].sort().map(d => DOW_FULL[d]).join(' ו')} (כוח) יותר פחמימה. ביום עם אירובי מסמנים ביומן „יום אימון” ומקבלים +1 פחמימה.`);
+  return { start, rows, coach: { avg }, title: 'השבוע הבא מהמאמן', reason: why.map(x => `<p>${K().esc(x)}</p>`).join('') };
+}
+function coachCard() {
+  const k = K(), c = N().coach, wr = weightRate();
+  return `<div class="card coach">
+    <div class="row between"><b>המאמן האוטומטי</b><span class="muted small">${c.avg != null ? `ממוצע נוכחי ${fmt(c.avg)} פחמימה` : 'עוד לא נבנתה טבלה'}</span></div>
+    <div class="seg sm" style="margin-top:10px">${[['lose', 'ירידה בשומן'], ['keep', 'שמירה'], ['gain', 'עלייה']].map(([v, t]) => `<button data-goal="${v}" aria-pressed="${c.goal === v}">${t}</button>`).join('')}</div>
+    <div class="field" style="margin-top:10px"><span class="muted small">ימי כוח קבועים</span><div class="chips wrap">${DOW.map((d, i) => `<button class="chip" data-sday="${i}" aria-pressed="${(c.strength || []).includes(i)}">${d}</button>`).join('')}</div></div>
+    <p class="note" style="margin:6px 0 10px">${wr ? `מגמת משקל: <bdi dir="ltr">${wr.pct >= 0 ? '+' : ''}${fmt(r2(wr.pct))}%</bdi> בשבוע` : 'כדי שהמאמן יתאים את הכמויות, כדאי להישקל פעם בשבוע (לשונית משקל).'}</p>
+    <button class="btn primary block" data-coach>בניית השבוע הבא</button>
+  </div>`;
+}
+function bindCoach(rerender) {
+  const k = K(), c = N().coach;
+  k.$$('[data-goal]').forEach(b => b.onclick = () => { c.goal = b.dataset.goal; save(); rerender(); });
+  k.$$('[data-sday]').forEach(b => b.onclick = () => { const d = +b.dataset.sday, set = new Set(c.strength || []); set.has(d) ? set.delete(d) : set.add(d); c.strength = [...set].sort(); save(); rerender(); });
+  const go = k.$('[data-coach]'); if (go) go.onclick = () => tableSheet(coachWeek());
 }
 
 /* progress: calories per day vs target, macro adherence, training vs rest days */
