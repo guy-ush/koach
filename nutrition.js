@@ -19,9 +19,10 @@ function N() {
   const db = K().db;
   if (!db.nutrition) db.nutrition = {};
   const n = db.nutrition;
-  const def = { on: false, grams: { p: 20, f: 10, c: 20 }, target: { p: 4, f: 3, c: 5 }, cTrain: null, cRest: null,
+  const def = { on: false, grams: { p: 20, f: 10, c: 25 }, target: { p: 4, f: 3, c: 5 }, cTrain: null, cRest: null,
     meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null, plan: {}, coach: { goal: 'lose', strength: [1, 5], avg: null, last: null } };
   for (const k in def) if (n[k] === undefined || n[k] === null && def[k] !== null) n[k] = def[k];
+  if (!n.c25) { if (n.grams.c === 20) n.grams.c = 25; n.c25 = true; } // the coach's method: a carb star is 25 g
   return n;
 }
 const save = () => K().save();
@@ -201,7 +202,7 @@ function addSheet(meal) {
   k.$('[data-manual]', s.el).onclick = () => manualSheet(pick());
 }
 /* Converting grams of a macro into stars, the way the coach's food list does it:
-   exact stars = grams / grams-per-star (protein 20, fat 10, carbs 20);
+   exact stars = grams / grams-per-star (protein 20, fat 10, carbs 25, per the InBalance method);
    up to 0.3 of a star is not counted, 0.3–0.4 is a quarter, otherwise the nearest half star.
    (Checked against the Notion food list: 65 of 69 values match.) */
 function starRule(x) {
@@ -212,7 +213,7 @@ function starRule(x) {
 const exactStars = (k, grams) => (grams || 0) / N().grams[k];
 const starsFromGrams = g => Object.fromEntries(MAC.map(([k]) => [k, starRule(exactStars(k, g[k]))]));
 const labelGrams = (per100, grams) => Object.fromEntries(MAC.map(([k]) => [k, (per100[k] || 0) * grams / 100]));
-const RULE_NOTE = 'כוכב = 20 ג׳ חלבון / 10 ג׳ שומן / 20 ג׳ פחמימה · עד 0.3 כוכב לא נספר · 0.3–0.4 = רבע · מעל זה מעגלים לחצי כוכב';
+const RULE_NOTE = () => 'כוכב = ' + N().grams.p + ' ג׳ חלבון / ' + N().grams.f + ' ג׳ שומן / ' + N().grams.c + ' ג׳ פחמימה · עד 0.3 כוכב לא נספר · 0.3–0.4 = רבע · מעל זה מעגלים לחצי כוכב';
 
 function amountSheet(f, meal, edit) {
   const k = K();
@@ -224,7 +225,7 @@ function amountSheet(f, meal, edit) {
       <div class="row between"><b style="font-weight:500">${byWeight ? 'כמה גרם' : 'כמות מנות'}</b>
         <div class="row"><button class="btn sm" data-q="${byWeight ? -10 : -0.5}">−</button><input class="input num" id="n-qty" type="number" inputmode="decimal" step="${byWeight ? 5 : 0.25}" min="0" value="${byWeight ? grams : qty}" style="width:84px;text-align:center"><button class="btn sm" data-q="${byWeight ? 10 : 0.5}">+</button></div></div>
       <div class="card" id="n-prev"></div>
-      ${byWeight ? `<p class="note">${RULE_NOTE}</p>` : ''}
+      ${byWeight ? `<p class="note">${RULE_NOTE()}</p>` : ''}
       <button class="btn sm" data-fix style="align-self:flex-start">✎ תיקון ידני של הכוכבים</button>
       <div class="card fixbox" id="n-fix" hidden>
         <div class="muted small" style="margin-bottom:8px">כוכבים לכל המנה הזו (לא למנה אחת במאגר)</div>
@@ -291,7 +292,7 @@ function manualSheet(meal) {
       <label class="field" id="m-g-wrap"><span>כמה גרם אכלת</span><input class="input num" id="m-g" type="number" inputmode="decimal" step="5" min="0" value="100" style="text-align:center"></label>
       <label class="field" id="m-serv-wrap" hidden><span>מנה (לא חובה)</span><input class="input" id="m-serv" placeholder="למשל: כוס, 200 גרם"></label>
       <div class="card" id="m-prev"></div>
-      <p class="note">${RULE_NOTE}</p>
+      <p class="note">${RULE_NOTE()}</p>
       <label class="row"><span class="grow">לשמור במאגר שלי</span><span class="toggle"><input type="checkbox" id="m-keep" checked><span></span></span></label>
     </div>`, '<button class="btn primary block" data-ok>הוספה</button>');
   const val = id => parseFloat(k.$(id, s.el).value) || 0;
