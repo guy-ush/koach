@@ -497,6 +497,7 @@ function renderWorkouts() {
   const ws = sortedWorkouts();
   let html = `<div class="top"><div><h1>אימונים</h1><p class="muted small">${ws.length ? `${ws.length} אימונים מתועדים` : ''}</p></div><button class="btn sm primary" data-new>${ICON.plus} אימון</button></div>`;
   if (!ws.length) html += `<div class="list"><div class="empty">עוד אין אימונים.<br>תעד סטים לפי ק״ג או לפי אחוז מה־RM.</div></div>`;
+  else html += dashboard(ws);
   let month = '';
   ws.forEach((w, i) => {
     const m = w.date.slice(0, 7);
@@ -509,6 +510,56 @@ function renderWorkouts() {
   $$('[data-wk]').forEach(b => b.onclick = () => go('#/workout/' + b.dataset.wk));
 }
 
+/* ---------- workouts dashboard ---------- */
+// Weeks start on Sunday (Israeli week).
+const weekStart = iso => { const d = toDate(iso); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); };
+const volOf = w => w.items.reduce((a, i) => a + i.sets.reduce((b, x) => b + (x.weight || 0) * (x.reps || 0), 0), 0);
+const daysAgo = iso => Math.round((toDate(today()) - toDate(iso)) / 864e5);
+function dashboard(ws) {
+  const now = today(), thisWeek = weekStart(now), month = now.slice(0, 7);
+  // last 12 weeks, oldest first
+  const weeks = [];
+  for (let i = 11; i >= 0; i--) { const d = toDate(thisWeek); d.setDate(d.getDate() - 7 * i); weeks.push({ key: d.toISOString().slice(0, 10), n: 0, vol: 0 }); }
+  const byKey = Object.fromEntries(weeks.map(w => [w.key, w]));
+  ws.forEach(w => { const k = byKey[weekStart(w.date)]; if (k) { k.n++; k.vol += volOf(w); } });
+  const cur = weeks[11], prev = weeks[10];
+  const monthN = ws.filter(w => w.date.slice(0, 7) === month).length;
+  // streak: consecutive weeks with a workout, ending this week (or last week if this one is still empty)
+  const weekSet = new Set(ws.map(w => weekStart(w.date)));
+  let streak = 0; const d = toDate(thisWeek); if (!weekSet.has(thisWeek)) d.setDate(d.getDate() - 7);
+  while (weekSet.has(d.toISOString().slice(0, 10))) { streak++; d.setDate(d.getDate() - 7); }
+  // records in the last 30 days: RM tests that beat every earlier test of the same lift and RM
+  const since = new Date(toDate(now) - 30 * 864e5).toISOString().slice(0, 10);
+  const prs = db.tests.filter(t => t.date >= since && t.date <= now && !db.tests.some(o => o !== t && o.lift === t.lift && o.rm === t.rm && (o.date < t.date || (o.date === t.date && o.created < t.created)) && o.weight >= t.weight) && db.tests.some(o => o !== t && o.lift === t.lift && o.rm === t.rm && o.date <= t.date));
+  const last = ws[0], ago = daysAgo(last.date);
+  const agoTxt = ago <= 0 ? 'היום' : ago === 1 ? 'אתמול' : `לפני ${ago} ימים`;
+  const dv = prev.vol ? Math.round((cur.vol - prev.vol) / prev.vol * 100) : null;
+  // bars: workouts per week
+  const W = 320, H = 100, B = 24, gap = 6, bw = (W - gap * 11) / 12, maxN = Math.max(3, ...weeks.map(w => w.n));
+  const bars = weeks.map((w, i) => {
+    const h = w.n ? Math.max(4, (H - B - 6) * w.n / maxN) : 0, x = i * (bw + gap), y = H - B - h;
+    const dd = toDate(w.key), lbl = `${dd.getDate()}/${dd.getMonth() + 1}`;
+    return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" class="${i === 11 ? 'cur' : ''}"><title>שבוע ${lbl}: ${w.n} אימונים · ${kg(Math.round(w.vol))} ק״ג נפח</title></rect>
+      ${w.n ? `<text x="${(x + bw / 2).toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle" class="n">${w.n}</text>` : `<rect x="${x.toFixed(1)}" y="${H - B - 2}" width="${bw.toFixed(1)}" height="2" rx="1" class="zero"/>`}
+      ${i % 3 === 2 || i === 11 ? `<text x="${(i === 11 ? x + bw : x + bw / 2).toFixed(1)}" y="${H - 4}" text-anchor="${i === 11 ? 'end' : 'middle'}">${i === 11 ? 'השבוע' : lbl}</text>` : ''}</g>`;
+  }).join('');
+  return `<div class="dash">
+    <div class="tiles">
+      <div class="stat"><b class="num">${cur.n}</b><span>השבוע</span></div>
+      <div class="stat"><b class="num">${monthN}</b><span>החודש</span></div>
+      <div class="stat"><b class="num">${streak}</b><span>${streak === 1 ? 'שבוע ברצף' : 'שבועות ברצף'}</span></div>
+      <div class="stat"><b class="num">${prs.length}</b><span>שיאים ב־30 יום</span></div>
+    </div>
+    <div class="card wk-card">
+      <div class="row between"><b>אימונים בשבוע</b><span class="muted small">12 שבועות</span></div>
+      <svg class="wbars" viewBox="0 0 ${W} ${H}" role="img" aria-label="אימונים בכל שבוע ב־12 השבועות האחרונים">${bars}</svg>
+      <div class="dash-foot">
+        <span>נפח השבוע: <b class="num">${kg(Math.round(cur.vol))}</b> ק״ג${dv != null && cur.vol ? ` <span class="delta ${dv >= 0 ? 'up' : 'down'}">${dv >= 0 ? '▲' : '▼'}${Math.abs(dv)}%</span>` : ''}</span>
+        <span class="muted">אימון אחרון: ${agoTxt}</span>
+      </div>
+    </div>
+  </div>`;
+}
 /* ---------- workout editor ---------- */
 let draft = null;
 function renderEditor(id) {
@@ -560,6 +611,7 @@ function drawItems() {
         ${av.length > 1 ? `<span class="s">% מתוך</span><div class="seg sm">${av.map(r => `<button data-base="${r}" aria-pressed="${r === base}">${r}RM</button>`).join('')}</div>` : ''}
         <span class="s grow" style="text-align:end">${b ? `${av.length > 1 ? "" : "% מתוך "}<bdi>${base}RM = ${kg(b.w)}</bdi>` : 'אין RM — רישום בק״ג'}</span>
       </div>
+      ${lastLine(it)}
       ${it.sets.map((s, si) => setRow(s, si, it)).join('')}
       <div class="ex-foot"><button class="btn sm" data-addset>${ICON.plus} סט</button>${it.sets.length ? '<button class="btn sm ghost" data-dupset>שכפל אחרון</button>' : ''}</div>
     </div>`;
@@ -593,6 +645,7 @@ function drawItems() {
   $$('.ex').forEach(ex => {
     const it = d.items[+ex.dataset.ii];
     $('[data-rmex]', ex).onclick = () => { d.items.splice(+ex.dataset.ii, 1); drawItems(); };
+    const cp = $('[data-copylast]', ex); if (cp) cp.onclick = () => { copyLast(it); drawItems(); toast('הסטים הועתקו מהאימון הקודם'); };
     $$('[data-base]', ex).forEach(b => b.onclick = () => {
       const nb = +b.dataset.base;
       if (!baseRM(it.lift, nb, d.date)) return toast(`אין ${nb}RM לתרגיל הזה`);
@@ -623,6 +676,36 @@ function drawItems() {
       $('[data-delset]', row).onclick = () => { it.sets.splice(+row.dataset.si, 1); drawItems(); };
     });
   });
+}
+// The previous time this lift was trained (not counting the workout being edited).
+function lastTime(lift) {
+  const ws = sortedWorkouts().filter(w => w.id !== draft.id && w.date <= draft.date && w.items.some(i => i.lift === lift));
+  if (!ws.length) return null;
+  const w = ws[0], items = w.items.filter(i => i.lift === lift);
+  return { date: w.date, base: items[0].base || null, sets: items.flatMap(i => i.sets) };
+}
+// "3×5 @ 75% (110) · 1×3 @ 120"
+function summarizeWithPct(sets) {
+  const g = [];
+  sets.forEach(x => {
+    const l = g[g.length - 1];
+    if (l && l.reps === x.reps && l.weight === x.weight && l.pct === (x.pct ?? null)) l.n++;
+    else g.push({ n: 1, reps: x.reps, weight: x.weight, pct: x.pct ?? null });
+  });
+  return g.map(x => `${x.n}×${x.reps} @ ${x.pct != null ? `${kg(x.pct)}% (${kg(x.weight)})` : kg(x.weight)}`).join(' · ');
+}
+function lastLine(it) {
+  const lt = lastTime(it.lift);
+  if (!lt) return '<div class="last none">פעם ראשונה עם התרגיל הזה</div>';
+  return `<div class="last"><div class="grow"><span class="lbl">פעם קודמת · ${fmtDate(lt.date)}${lt.base && lt.sets.some(x => x.pct != null) ? ` · מתוך ${lt.base}RM` : ''}</span><bdi class="sum">${summarizeWithPct(lt.sets)}</bdi></div><button class="btn sm" data-copylast>כמו פעם קודמת</button></div>`;
+}
+// Copy last time's sets. Percent sets stay percentages when that RM still exists (so they follow
+// the current RM); otherwise they come over as the kilos that were lifted.
+function copyLast(it) {
+  const lt = lastTime(it.lift); if (!lt) return;
+  const keepPct = lt.base && availBases(it.lift).includes(lt.base);
+  if (keepPct) it.base = lt.base;
+  it.sets = lt.sets.map(x => ({ reps: x.reps, pct: keepPct && x.pct != null ? x.pct : null, weight: x.weight }));
 }
 function askBase(lift, av, done) {
   const s = sheet(`${LIFT(lift).name} · אחוזים מתוך?`, `<p class="note" style="margin-bottom:12px">לתרגיל הזה יש כמה RM. מאיזה לחשב את האחוזים באימון?</p>

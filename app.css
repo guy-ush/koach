@@ -314,3 +314,30 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.35),inset 0 -6px 12px rgba(0,0,0,.35)}
 .pg-empty .pg-head{padding-bottom:4px}
 .pg-empty p{padding:0 4px 2px}
+
+/* last time, inside an exercise */
+.last{display:flex;align-items:center;gap:10px;margin:0 0 6px;padding:8px 10px;border-radius:12px;background:var(--surface-2);font-size:13px}
+.last .lbl{display:block;color:var(--muted);font-size:12px}
+.last .sum{display:block;direction:ltr;text-align:right;font-variant-numeric:tabular-nums;font-weight:500;unicode-bidi:plaintext}
+.last .btn{flex:none;white-space:nowrap}
+.last.none{color:var(--muted);font-size:12.5px;padding:6px 10px}
+/* workouts dashboard */
+.dash{display:flex;flex-direction:column;gap:10px;margin-bottom:6px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tiles .stat{padding:10px 4px}
+.tiles .stat b{font-size:24px}
+.tiles .stat span{font-size:12px;line-height:1.25;display:block}
+.wk-card{padding:14px 14px 12px}
+.wbars{width:100%;height:auto;display:block;margin:10px 0 6px;direction:ltr;stroke:none;overflow:visible}
+.wbars *{stroke:none}
+.wbars rect{fill:color-mix(in srgb,var(--accent) 45%,transparent)}
+.wbars rect.cur{fill:var(--accent)}
+.wbars rect.zero{fill:var(--line)}
+.wbars text{font-size:10px;fill:var(--muted);font-family:Heebo,system-ui,sans-serif}
+.wbars text.n{fill:var(--ink);font-weight:500}
+:root[data-theme="dark"] .wbars rect.cur{fill:var(--ink)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .wbars rect.cur{fill:var(--ink)}:root:not([data-theme="light"]) .wbars rect{fill:color-mix(in srgb,var(--ink) 35%,transparent)}}
+:root[data-theme="dark"] .wbars rect{fill:color-mix(in srgb,var(--ink) 35%,transparent)}
+.wbars rect.zero{fill:var(--line)!important}
+.dash-foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13.5px}
+.dash-foot b{font-weight:500}
