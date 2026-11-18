@@ -104,8 +104,8 @@ function render() {
   if (!curDate) curDate = k.today();
   const view = document.getElementById('view');
   view.innerHTML = `
-    <div class="top"><div><h1>תזונה</h1><p class="muted small">${showK() ? 'כוכבים · גרמים · קלוריות' : 'חלבון · שומן · פחמימה בכוכבים'}</p></div>
-      <div class="row" style="gap:6px">${n.claudeUrl ? `<a class="btn sm" href="${k.esc(n.claudeUrl)}" target="_blank" rel="noopener">${ICO.cam} צילום ב־Claude</a>` : ''}<button class="btn sm" data-paste>📋 הדבקה</button></div></div>
+    <div class="top"><div><h1>תזונה</h1><p class="muted small">${showK() ? 'כוכבים · גרמים · קלוריות' : 'בכוכבים'}</p></div>
+      <div class="row" style="gap:6px">${n.claudeUrl ? `<a class="btn sm nhead-btn" href="${k.esc(n.claudeUrl)}" target="_blank" rel="noopener">${ICO.cam} צילום</a>` : ''}<button class="btn sm nhead-btn" data-paste>📋 הדבקה</button></div></div>
     <div class="seg" style="margin-bottom:14px">${[['day', 'יומן'], ['plan', 'יעדים'], ['stats', 'התקדמות'], ['weight', 'משקל']].map(([v, t]) => `<button data-sub="${v}" aria-pressed="${sub === v}">${t}</button>`).join('')}</div>
     <div id="nbody"></div>`;
   k.$('[data-paste]').onclick = () => pasteSheet(mealNow());

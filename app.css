@@ -536,3 +536,6 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 
 .ps-prompt{white-space:pre-wrap;font-family:inherit;font-size:12.5px;background:var(--surface-2);border-radius:12px;padding:10px;margin:0;max-height:220px;overflow:auto;direction:rtl;unicode-bidi:plaintext}
 #ps-text{font-size:14px;min-height:90px;resize:vertical}
+
+.nhead-btn{white-space:nowrap;display:inline-flex;align-items:center;gap:5px;color:var(--text);text-decoration:none}
+.nhead-btn svg{width:17px;height:17px}
