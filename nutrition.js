@@ -172,9 +172,11 @@ function renderDay() {
         ${es.length ? `<div class="list">${es.map(e => `<button class="li" data-entry="${e.id}"><div class="grow"><div class="t">${k.esc(e.name)}</div><div class="s">${e.qty !== 1 ? `${fmt(e.qty)} × ` : ''}${k.esc(e.serving || '')}</div></div>${chips({ p: e.p * e.qty, f: e.f * e.qty, c: e.c * e.qty })}${showK() ? `<span class="s num">${k.kg(kcalOf({ p: e.p * e.qty, f: e.f * e.qty, c: e.c * e.qty }))}</span>` : ''}</button>`).join('')}</div>` : ''}
       </div>`;
     }).join('')}
+    ${list.length ? `<button class="btn block ghost" data-copyday style="margin-top:6px">📋 העתקת היום כטקסט</button>` : ''}
     <div class="save-bar"><button class="btn primary block" data-add="">${k.ICON.plus} הוספת אוכל</button></div>`;
   k.$$('[data-d]').forEach(b => b.onclick = () => { curDate = addDays(curDate, +b.dataset.d); renderDay(); });
   k.$('[data-today]').onclick = () => { curDate = k.today(); renderDay(); };
+  const cd = k.$('[data-copyday]'); if (cd) cd.onclick = () => copyDay(curDate);
   k.$('[data-daytype]').onclick = () => {
     const auto = workoutsOn(curDate).length > 0, cur = isTrain(curDate), next = cur ? 'rest' : 'train';
     if ((next === 'train') === auto) delete n.dayType[curDate]; else n.dayType[curDate] = next;
@@ -330,6 +332,31 @@ function amountSheet(f, meal, edit) {
   const del = k.$('[data-del]', s.el);
   if (del) del.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== edit.id); save(); s.close(); renderDay(); };
 }
+/* the whole day as plain text, to paste into a chat */
+function dayText(date) {
+  const k = K(), n = N(), es = entriesOn(date), tot = totals(es), tg = targetFor(date);
+  const st = o => `חלבון ${fmt(o.p || 0)} · שומן ${fmt(o.f || 0)} · פחמימה ${fmt(o.c || 0)}`;
+  const lines = [`תזונה – ${k.fmtLong ? k.fmtLong(date) : k.fmtDate(date)}${isTrain(date) ? ' (יום אימון)' : ''}`,
+    `יעד (כוכבים): חלבון ${targetText('p', tg)} · שומן ${targetText('f', tg)} · פחמימה ${targetText('c', tg)}${tg.note ? ` (${tg.note})` : ''}`, ''];
+  n.meals.forEach(meal => {
+    const m = es.filter(e => e.meal === meal); if (!m.length) return;
+    lines.push(`${meal}:`);
+    m.forEach(e => { const q = e.qty || 1; lines.push(`• ${e.name}${e.serving ? ` (${q !== 1 ? fmt(q) + ' × ' : ''}${e.serving})` : ''} – ${st({ p: e.p * q, f: e.f * q, c: e.c * q })}`); });
+  });
+  const other = es.filter(e => !n.meals.includes(e.meal));
+  if (other.length) { lines.push('אחר:'); other.forEach(e => { const q = e.qty || 1; lines.push(`• ${e.name} – ${st({ p: e.p * q, f: e.f * q, c: e.c * q })}`); }); }
+  lines.push('', `סה״כ: ${st(tot)}`);
+  const left = MAC.map(([m, name]) => { const d = r2((tg[m] || 0) - tot[m]); return d > 0 ? `${name} עוד ${fmt(d)}` : d < 0 && !(m === 'p' && tg.plus) ? `${name} מעל ב־${fmt(-d)}` : null; }).filter(Boolean);
+  lines.push(left.length ? `נשאר: ${left.join(' · ')}` : 'היעד הושלם ✓');
+  if (showK()) lines.push(`קלוריות: ${kcalOf(tot)} / ${kcalOf(tg)}`);
+  return lines.join('\n');
+}
+async function copyDay(date) {
+  const k = K(), t = dayText(date);
+  try { await navigator.clipboard.writeText(t); k.toast('היום הועתק ✓ אפשר להדביק בצ׳אט'); }
+  catch (e) { if (navigator.share) { try { await navigator.share({ text: t }); } catch (e2) {} } else prompt('העתק:', t); }
+}
+
 /* ---------- back from a meal photo in Claude ----------
    The app can't read the Claude chat, so the project is told to end every answer with lines like
    KOACH|פסטה מבושלת|170 גרם|0|0|2 (name | amount | protein | fat | carb stars); they are copied
