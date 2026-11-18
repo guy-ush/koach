@@ -105,7 +105,7 @@ function render() {
   const view = document.getElementById('view');
   view.innerHTML = `
     <div class="top"><div><h1>תזונה</h1><p class="muted small">${showK() ? 'כוכבים · גרמים · קלוריות' : 'בכוכבים'}</p></div>
-      <div class="row" style="gap:6px">${n.claudeUrl ? `<a class="btn sm nhead-btn" href="${k.esc(n.claudeUrl)}" target="_blank" rel="noopener">${ICO.cam} צילום</a>` : ''}<button class="btn sm nhead-btn" data-paste>📋 הדבקה</button></div></div>
+      <div class="row" style="gap:6px">${n.claudeUrl ? `<a class="btn sm nhead-btn" href="${k.esc(n.claudeUrl)}" ${appLink(n.claudeUrl) ? '' : 'target="_blank" rel="noopener"'}>${ICO.cam} צילום</a>` : ''}<button class="btn sm nhead-btn" data-paste>📋 הדבקה</button></div></div>
     <div class="seg" style="margin-bottom:14px">${[['day', 'יומן'], ['plan', 'יעדים'], ['stats', 'התקדמות'], ['weight', 'משקל']].map(([v, t]) => `<button data-sub="${v}" aria-pressed="${sub === v}">${t}</button>`).join('')}</div>
     <div id="nbody"></div>`;
   k.$('[data-paste]').onclick = () => pasteSheet(mealNow());
@@ -652,6 +652,14 @@ function renderWeight() {
   });
 }
 
+/* Which claude.ai links open the Claude app on the phone (iOS universal links): a chat (/chat/<id>) or
+   a new chat (/new) do; a project page (/project/...) is not one of them and stays in the browser. */
+const appLink = u => /^https:\/\/claude\.ai\/(chat\/[0-9a-f-]{36}|new)\b/i.test(u || '');
+function claudeHint(u) {
+  if (!u) return 'מומלץ: קישור לשיחה בתוך הפרויקט „מעקב תזונה”. קישור לשיחה נפתח באפליקציית Claude. קישור לפרויקט נפתח בדפדפן.';
+  if (appLink(u)) return '✓ הקישור הזה נפתח באפליקציית Claude (אם היא מותקנת).';
+  return 'קישור לפרויקט נפתח בדפדפן, לא באפליקציה. כדי שייפתח באפליקציה: פתח בפרויקט שיחה אחת לצילומי אוכל, העתק את הקישור שלה (מתחיל ב־https://claude.ai/chat/) והדבק כאן.';
+}
 /* ---------- settings ---------- */
 function settingsHTML() {
   const k = K(), n = N(), t = n.target;
@@ -669,7 +677,8 @@ function settingsHTML() {
       <details class="nadv"><summary>הגדרות מתקדמות</summary><div class="stack" style="margin-top:10px">
         <div class="field"><span>גרמים לכוכב</span><div class="grid3">${MAC.map(([m, name]) => `<label class="field"><span>${name}</span><input class="input num" data-gps="${m}" type="number" inputmode="decimal" step="1" min="1" value="${n.grams[m]}" style="text-align:center"></label>`).join('')}</div></div>
         <label class="field"><span>ארוחות (מופרדות בפסיק)</span><input class="input" id="n-meals-in" value="${k.esc(n.meals.join(', '))}"></label>
-        <label class="field"><span>קישור לפרויקט שלך ב־Claude (לצילום אוכל)</span><input class="input" id="n-claude" dir="ltr" placeholder="https://claude.ai/project/…" value="${k.esc(n.claudeUrl || '')}"></label>
+        <label class="field"><span>קישור לשיחה ב־Claude (לצילום אוכל)</span><input class="input" id="n-claude" dir="ltr" placeholder="https://claude.ai/chat/…" value="${k.esc(n.claudeUrl || '')}"></label>
+        <p class="note" id="n-claude-hint">${claudeHint(n.claudeUrl)}</p>
       </div></details>` : ''}
     </div>`;
 }
@@ -683,7 +692,7 @@ function bindSettings() {
   k.$$('[data-cday]').forEach(i => i.onchange = () => { const v = parseFloat(i.value); n[i.dataset.cday] = isNaN(v) ? null : v; save(); });
   k.$$('[data-gps]').forEach(i => i.onchange = () => { n.grams[i.dataset.gps] = Math.max(1, parseFloat(i.value) || n.grams[i.dataset.gps]); save(); hint(); });
   const mi = k.$('#n-meals-in'); if (mi) mi.onchange = () => { const m = mi.value.split(/[,،]/).map(x => x.trim()).filter(Boolean); n.meals = m.length ? m : DEFAULT_MEALS.slice(); save(); };
-  const cl = k.$('#n-claude'); if (cl) cl.onchange = () => { const v = cl.value.trim(); n.claudeUrl = /^https:\/\//.test(v) ? v : ''; if (v && !n.claudeUrl) k.toast('קישור צריך להתחיל ב־https://'); save(); };
+  const cl = k.$('#n-claude'); if (cl) cl.onchange = () => { const v = cl.value.trim(); n.claudeUrl = /^https:\/\//.test(v) ? v : ''; if (v && !n.claudeUrl) k.toast('קישור צריך להתחיל ב־https://'); save(); const h = k.$('#n-claude-hint'); if (h) h.innerHTML = claudeHint(n.claudeUrl); };
   k.$('[data-plan]').onclick = planSheet;
   hint();
 }
