@@ -25,7 +25,40 @@ function N() {
   if (!n.c25) { if (n.grams.c === 20) n.grams.c = 25; n.c25 = true; } // the coach's method: a carb star is 25 g
   return n;
 }
-const save = () => K().save();
+const save = () => { K().save(); syncSoon(); };
+
+/* ---------- copy of every new food entry to Notion, through a Make webhook ----------
+   The browser can't call the Notion API (CORS), so each new entry is posted as a simple form to a Make
+   webhook, which creates the row. Entries are sent once; if the phone is offline they wait and go later.
+   Stars are sent as the total for the entry (quantity already included) with כמות = 1, and the amount
+   ("1.5 × 85 גרם") goes into the notes. Edits and deletions after sending are not mirrored. */
+let syncT = null, syncing = false;
+function syncSoon() { clearTimeout(syncT); syncT = setTimeout(syncNow, 1500); }
+const clean = v => String(v ?? '').replace(/[\\\n\r\t]/g, ' ').replace(/"/g, '״').trim().slice(0, 180);
+async function syncNow() {
+  const n = N(), sy = n.sync;
+  if (!sy || !sy.url || syncing || !navigator.onLine) return;
+  const done = new Set(sy.done || []);
+  const todo = n.log.filter(e => !done.has(e.id) && (e.at || 0) >= (sy.since || 0) && e.src !== 'notion');
+  if (!todo.length) return;
+  syncing = true;
+  try {
+    for (const e of todo) {
+      const q = e.qty || 1, r = v => Math.round((v || 0) * q * 100) / 100;
+      const body = new URLSearchParams({ id: e.id, date: e.date, name: clean(e.name) || 'אוכל', qty: '1',
+        p: String(r(e.p)), f: String(r(e.f)), c: String(r(e.c)), serving: clean(`${q !== 1 ? fmt(q) + ' × ' : ''}${e.serving || ''}`), meal: clean(e.meal) });
+      try { await fetch(sy.url, { method: 'POST', mode: 'no-cors', body }); }
+      catch (err) { break; } // offline or blocked: try again later
+      done.add(e.id); sy.last = Date.now();
+    }
+  } finally {
+    const ids = new Set(n.log.map(e => e.id));
+    sy.done = [...done].filter(id => ids.has(id));
+    K().save(); syncing = false;
+  }
+}
+window.addEventListener('online', () => syncSoon());
+setTimeout(() => { try { syncNow(); } catch (e) {} }, 4000);
 const r2 = v => Math.round(v * 100) / 100;
 const fmt = v => K().kg(r2(v));
 const gramsOf = (k, stars) => stars * N().grams[k];
@@ -680,6 +713,8 @@ function settingsHTML() {
         <label class="field"><span>ארוחות (מופרדות בפסיק)</span><input class="input" id="n-meals-in" value="${k.esc(n.meals.join(', '))}"></label>
         <label class="field"><span>קישור לשיחה ב־Claude (לצילום אוכל)</span><input class="input" id="n-claude" dir="ltr" placeholder="https://claude.ai/chat/…" value="${k.esc(n.claudeUrl || '')}"></label>
         <p class="note" id="n-claude-hint">${claudeHint(n.claudeUrl)}</p>
+        <label class="field"><span>שמירה גם ב־Notion (כתובת Webhook של Make)</span><input class="input" id="n-sync" dir="ltr" placeholder="https://hook.eu2.make.com/…" value="${k.esc(n.sync?.url || '')}"></label>
+        <p class="note">${n.sync?.url ? `✓ כל רישום אוכל חדש נשלח גם ל־Notion${n.sync.last ? ` · נשלח לאחרונה ${new Date(n.sync.last).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}. עריכה או מחיקה אחרי השליחה לא מתעדכנות שם.` : 'ריק = בלי Notion. רישומים ישנים לא נשלחים, רק מה שנרשם מעכשיו.'}</p>
       </div></details>` : ''}
     </div>`;
 }
@@ -693,6 +728,7 @@ function bindSettings() {
   k.$$('[data-cday]').forEach(i => i.onchange = () => { const v = parseFloat(i.value); n[i.dataset.cday] = isNaN(v) ? null : v; save(); });
   k.$$('[data-gps]').forEach(i => i.onchange = () => { n.grams[i.dataset.gps] = Math.max(1, parseFloat(i.value) || n.grams[i.dataset.gps]); save(); hint(); });
   const mi = k.$('#n-meals-in'); if (mi) mi.onchange = () => { const m = mi.value.split(/[,،]/).map(x => x.trim()).filter(Boolean); n.meals = m.length ? m : DEFAULT_MEALS.slice(); save(); };
+  const sy = k.$('#n-sync'); if (sy) sy.onchange = () => { const v = sy.value.trim(); if (v && !/^https:\/\/hook\.[a-z0-9.]*make\.com\//.test(v)) { k.toast('צריך כתובת Webhook של Make'); return; } n.sync = v ? { url: v, since: n.sync?.url === v ? n.sync.since : Date.now(), done: n.sync?.done || [] } : null; save(); k.route(); if (v) k.toast('מעכשיו כל רישום אוכל יישלח גם ל־Notion'); };
   const cl = k.$('#n-claude'); if (cl) cl.onchange = () => { const v = cl.value.trim(); n.claudeUrl = /^https:\/\//.test(v) ? v : ''; if (v && !n.claudeUrl) k.toast('קישור צריך להתחיל ב־https://'); save(); const h = k.$('#n-claude-hint'); if (h) h.innerHTML = claudeHint(n.claudeUrl); };
   k.$('[data-plan]').onclick = planSheet;
   hint();
