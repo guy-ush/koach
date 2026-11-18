@@ -519,3 +519,11 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 
 .fixbox{padding:12px}
 .fixbox input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+
+/* targets list: every number carries its own label */
+.plan-row .pr-v{display:flex;gap:6px}
+.plan-row .pr-v i{display:flex;flex-direction:column;align-items:center;min-width:46px;font-style:normal;line-height:1.1}
+.plan-row .pr-v i b{font-weight:500;font-size:16px}
+.plan-row .pr-v i small{font-size:10.5px;color:var(--muted);margin-top:2px}
+.coach-how{font-size:13px;color:var(--muted);margin:0 0 10px;line-height:1.5}
+.coach-how b{color:var(--text);font-weight:500}

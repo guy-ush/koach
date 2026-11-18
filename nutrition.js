@@ -20,7 +20,7 @@ function N() {
   if (!db.nutrition) db.nutrition = {};
   const n = db.nutrition;
   const def = { on: false, grams: { p: 20, f: 10, c: 25 }, target: { p: 4, f: 3, c: 5 }, cTrain: null, cRest: null,
-    meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null, plan: {}, coach: { goal: 'lose', strength: [1, 5], avg: null, last: null } };
+    meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null, plan: {}, showKcal: false, coach: { goal: 'lose', strength: [1, 5], avg: null, last: null } };
   for (const k in def) if (n[k] === undefined || n[k] === null && def[k] !== null) n[k] = def[k];
   if (!n.c25) { if (n.grams.c === 20) n.grams.c = 25; n.c25 = true; } // the coach's method: a carb star is 25 g
   return n;
@@ -30,6 +30,11 @@ const r2 = v => Math.round(v * 100) / 100;
 const fmt = v => K().kg(r2(v));
 const gramsOf = (k, stars) => stars * N().grams[k];
 const kcalOf = st => Math.round(MAC.reduce((a, [k]) => a + gramsOf(k, st[k] || 0) * KCAL[k], 0));
+// stars only by default; calories and grams appear when turned on in settings
+const showK = () => !!N().showKcal;
+const energy = st => showK() ? kcalOf(st) : r2(MAC.reduce((a, [k]) => a + (+st[k] || 0), 0));
+const EU = () => showK() ? 'קק״ל' : '★';
+const efmt = v => showK() ? K().kg(Math.round(v)) : fmt(v);
 const addDays = (iso, n) => { const d = K().toDate(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const workoutsOn = date => K().db.workouts.filter(w => w.date === date);
 const isTrain = date => { const t = N().dayType[date]; return t ? t === 'train' : workoutsOn(date).length > 0; };
@@ -99,7 +104,7 @@ function render() {
   if (!curDate) curDate = k.today();
   const view = document.getElementById('view');
   view.innerHTML = `
-    <div class="top"><div><h1>תזונה</h1><p class="muted small">כוכבים · גרמים · קלוריות</p></div>
+    <div class="top"><div><h1>תזונה</h1><p class="muted small">${showK() ? 'כוכבים · גרמים · קלוריות' : 'חלבון · שומן · פחמימה בכוכבים'}</p></div>
       ${n.claudeUrl ? `<a class="btn sm" href="${k.esc(n.claudeUrl)}" target="_blank" rel="noopener">${ICO.cam} צילום ב־Claude</a>` : ''}</div>
     <div class="seg" style="margin-bottom:14px">${[['day', 'יומן'], ['plan', 'יעדים'], ['stats', 'התקדמות'], ['weight', 'משקל']].map(([v, t]) => `<button data-sub="${v}" aria-pressed="${sub === v}">${t}</button>`).join('')}</div>
     <div id="nbody"></div>`;
@@ -110,7 +115,7 @@ function render() {
 function renderDay() {
   const k = K(), n = N(), box = document.getElementById('nbody');
   const list = entriesOn(curDate), tot = totals(list), tg = targetFor(curDate);
-  const eatK = kcalOf(tot), tgK = kcalOf(tg), rem = tgK - eatK, tr = isTrain(curDate), wos = workoutsOn(curDate);
+  const eatK = energy(tot), tgK = energy(tg), rem = tgK - eatK, tr = isTrain(curDate), wos = workoutsOn(curDate);
   const woNames = [...new Set(wos.flatMap(w => w.items.map(i => k.LIFT(i.lift).name)))];
   box.innerHTML = `
     <div class="datebar"><button class="icon-btn" data-d="-1" aria-label="יום קודם">${k.ICON.back}</button>
@@ -119,18 +124,18 @@ function renderDay() {
     <button class="daytype ${tr ? 'train' : ''}" data-daytype>${tr ? `${ICO.bar} יום אימון${woNames.length ? ` · ${k.esc(woNames.join(', '))}` : ''}` : 'יום מנוחה'}<small>${n.dayType[curDate] ? 'נקבע ידנית · ' : ''}לחץ לשינוי</small></button>
     ${tg.src !== 'default' ? `<div class="plan-src">${tg.src === 'plan' ? '<b>יעד מהתוכנית</b>' : '<b>הערה מהתוכנית</b>'}${tg.note ? ` · ${k.esc(tg.note)}` : ''}</div>` : ''}
     <div class="card nsum">
-      <div class="nring-wrap">${ring(eatK, tgK)}<div class="nring-val"><b class="num">${k.kg(Math.abs(rem))}</b><span>${rem >= 0 ? 'נשארו' : 'מעל היעד'}</span><small><bdi dir="ltr">${k.kg(eatK)} / ${k.kg(tgK)}</bdi> קק״ל</small></div></div>
+      <div class="nring-wrap">${ring(eatK, tgK)}<div class="nring-val"><b class="num">${efmt(Math.abs(rem))}${showK() ? '' : ' ★'}</b><span>${rem >= 0 ? (showK() ? 'נשארו' : 'כוכבים נשארו') : 'מעל היעד'}</span><small><bdi dir="ltr">${efmt(eatK)} / ${efmt(tgK)}</bdi> ${showK() ? 'קק״ל' : 'סה״כ כוכבים'}</small></div></div>
       <div class="nmacros">${MAC.map(([m, name]) => {
         const e = tot[m], t = tg[m], pct = t ? Math.min(100, e / t * 100) : 0, over = isOver(m, e, tg);
         return `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s ${over ? 'over' : ''}"><bdi dir="ltr"><b class="num">${fmt(e)}</b>/${targetText(m, tg)}</bdi> ★</span></div>
-          <div class="nbar"><i style="width:${pct.toFixed(1)}%"></i></div><div class="nm-g"><bdi dir="ltr">${Math.round(gramsOf(m, e))} / ${Math.round(gramsOf(m, t))}</bdi> ג׳</div></div>`;
+          <div class="nbar"><i style="width:${pct.toFixed(1)}%"></i></div><div class="nm-g">${showK() ? `<bdi dir="ltr">${Math.round(gramsOf(m, e))} / ${Math.round(gramsOf(m, t))}</bdi> ג׳` : t > e ? `נשארו ${fmt(t - e)} ★` : over ? 'מעל היעד' : 'הושלם ✓'}</div></div>`;
       }).join('')}</div>
     </div>
     ${n.meals.map(meal => {
       const es = list.filter(e => e.meal === meal), mt = totals(es), yest = entriesOn(addDays(curDate, -1)).filter(e => e.meal === meal);
-      return `<div class="nmeal"><div class="nmeal-h"><b>${k.esc(meal)}</b>${es.length ? `<span class="muted small">${k.kg(kcalOf(mt))} קק״ל</span>${chips(mt)}` : ''}
+      return `<div class="nmeal"><div class="nmeal-h"><b>${k.esc(meal)}</b>${es.length ? `${showK() ? `<span class="muted small">${k.kg(kcalOf(mt))} קק״ל</span>` : ''}${chips(mt)}` : ''}
           <span class="grow"></span>${!es.length && yest.length ? `<button class="btn sm ghost" data-copy="${k.esc(meal)}">כמו אתמול</button>` : ''}<button class="icon-btn" data-add="${k.esc(meal)}" aria-label="הוספה ל${k.esc(meal)}">${k.ICON.plus}</button></div>
-        ${es.length ? `<div class="list">${es.map(e => `<button class="li" data-entry="${e.id}"><div class="grow"><div class="t">${k.esc(e.name)}</div><div class="s">${e.qty !== 1 ? `${fmt(e.qty)} × ` : ''}${k.esc(e.serving || '')}</div></div>${chips({ p: e.p * e.qty, f: e.f * e.qty, c: e.c * e.qty })}<span class="s num">${k.kg(kcalOf({ p: e.p * e.qty, f: e.f * e.qty, c: e.c * e.qty }))}</span></button>`).join('')}</div>` : ''}
+        ${es.length ? `<div class="list">${es.map(e => `<button class="li" data-entry="${e.id}"><div class="grow"><div class="t">${k.esc(e.name)}</div><div class="s">${e.qty !== 1 ? `${fmt(e.qty)} × ` : ''}${k.esc(e.serving || '')}</div></div>${chips({ p: e.p * e.qty, f: e.f * e.qty, c: e.c * e.qty })}${showK() ? `<span class="s num">${k.kg(kcalOf({ p: e.p * e.qty, f: e.f * e.qty, c: e.c * e.qty }))}</span>` : ''}</button>`).join('')}</div>` : ''}
       </div>`;
     }).join('')}
     <div class="save-bar"><button class="btn primary block" data-add="">${k.ICON.plus} הוספת אוכל</button></div>`;
@@ -177,7 +182,7 @@ function addSheet(meal) {
   const pick = () => s.el.querySelector('[data-meal][aria-pressed="true"]').dataset.meal;
   k.$$('[data-meal]', s.el).forEach(b => b.onclick = () => k.$$('[data-meal]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)));
   const row = f => `<div class="li nf"><button class="nf-main" data-pick="${k.esc(f.id)}"><div class="t">${k.esc(f.name)}</div><div class="s">${k.esc(f.serving || '')}${f.note ? ` · ${k.esc(f.note)}` : ''}</div></button>
-      ${chips(f)}<span class="s num">${kcalOf(f) ? k.kg(kcalOf(f)) : ''}</span><button class="star-btn" data-fav="${k.esc(f.name)}" aria-pressed="${isFav(f.name)}" aria-label="מועדף">${ICO.star}</button></div>`;
+      ${chips(f)}${showK() ? `<span class="s num">${kcalOf(f) ? k.kg(kcalOf(f)) : ''}</span>` : ''}<button class="star-btn" data-fav="${k.esc(f.name)}" aria-pressed="${isFav(f.name)}" aria-label="מועדף">${ICO.star}</button></div>`;
   const all = () => { const lib = library(); const byName = new Map(); [...recent(), ...lib].forEach(f => { if (!byName.has(f.name)) byName.set(f.name, f); }); return byName; };
   const draw = () => {
     const q = k.$('#n-q', s.el).value.trim(), map = all();
@@ -239,7 +244,7 @@ function amountSheet(f, meal, edit) {
   const stars = () => fixed || auto();
   const prev = () => {
     const st = stars(), g = byWeight ? labelGrams(per100, grams) : null;
-    k.$('#n-prev', s.el).innerHTML = `<div class="nprev">${MAC.map(([m, name]) => `<div class="${m}"><span>${name}</span><b class="num">${fmt(st[m])} ★</b><small>${byWeight ? `${fmt(g[m])} ג׳ · <bdi dir="ltr">${exactStars(m, g[m]).toFixed(2)}</bdi>` : `${Math.round(gramsOf(m, st[m]))} ג׳`}</small></div>`).join('')}<div><span>קלוריות</span><b class="num">${k.kg(kcalOf(st))}</b><small>קק״ל</small></div></div>`;
+    k.$('#n-prev', s.el).innerHTML = `<div class="nprev">${MAC.map(([m, name]) => `<div class="${m}"><span>${name}</span><b class="num">${fmt(st[m])} ★</b><small>${byWeight ? `${fmt(g[m])} ג׳ · <bdi dir="ltr">${exactStars(m, g[m]).toFixed(2)}</bdi>` : showK() ? `${Math.round(gramsOf(m, st[m]))} ג׳` : ''}</small></div>`).join('')}${showK() ? `<div><span>קלוריות</span><b class="num">${k.kg(kcalOf(st))}</b><small>קק״ל</small></div>` : ''}</div>`;
   };
   const inp = k.$('#n-qty', s.el);
   inp.oninput = () => { const v = Math.max(0, parseFloat(inp.value) || 0); if (byWeight) grams = v; else qty = v; prev(); };
@@ -308,7 +313,7 @@ function manualSheet(meal) {
     k.$('#m-serv-wrap', s.el).hidden = mode === 'label';
     MAC.forEach(([m, name]) => { k.$('#m-' + m, s.el).step = mode === 'stars' ? '0.25' : '0.1'; k.$('#m-' + m, s.el).closest('label').querySelector('span').textContent = mode === 'label' ? `${name} ל־100 ג׳` : mode === 'grams' ? `${name} (ג׳)` : `${name} ★`; });
     const { st, g } = read();
-    k.$('#m-prev', s.el).innerHTML = `<div class="nprev">${MAC.map(([m, name]) => `<div class="${m}"><span>${name}</span><b class="num">${fmt(st[m])} ★</b><small>${g ? `${fmt(g[m])} ג׳ · <bdi dir="ltr">${exactStars(m, g[m]).toFixed(2)}</bdi>` : `${Math.round(gramsOf(m, st[m]))} ג׳`}</small></div>`).join('')}<div><span>קלוריות</span><b class="num">${k.kg(kcalOf(st))}</b><small>קק״ל</small></div></div>`;
+    k.$('#m-prev', s.el).innerHTML = `<div class="nprev">${MAC.map(([m, name]) => `<div class="${m}"><span>${name}</span><b class="num">${fmt(st[m])} ★</b><small>${g ? `${fmt(g[m])} ג׳ · <bdi dir="ltr">${exactStars(m, g[m]).toFixed(2)}</bdi>` : showK() ? `${Math.round(gramsOf(m, st[m]))} ג׳` : ''}</small></div>`).join('')}${showK() ? `<div><span>קלוריות</span><b class="num">${k.kg(kcalOf(st))}</b><small>קק״ל</small></div>` : ''}</div>`;
   };
   k.$$('[data-mode]', s.el).forEach(b => b.onclick = () => { mode = b.dataset.mode; k.$$('[data-mode]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)); draw(); });
   k.$$('#m-p,#m-f,#m-c,#m-g', s.el).forEach(i => { i.oninput = draw; });
@@ -337,13 +342,12 @@ function renderPlan() {
   const dates = Object.keys(n.plan).sort();
   const upcoming = dates.filter(d => d >= addDays(t, -3)), past = dates.filter(d => d < addDays(t, -3)).reverse();
   const row = d => { const e = n.plan[d]; return `<button class="li plan-row ${d === t ? 'today' : ''}" data-pd="${d}"><span class="pr-d"><b>${dowOf(d)}</b>${k.fmtDate(d)}</span>
-      ${hasNumbers(e) ? `<span class="pr-v"><i class="c">${e.c != null ? fmt(e.c) : '–'}</i><i class="f">${e.f != null ? fmt(e.f) : '–'}</i><i class="p"><bdi dir="ltr">${proteinText(e) || '–'}</bdi></i></span>` : ''}
+      ${hasNumbers(e) ? `<span class="pr-v"><i class="c"><b>${e.c != null ? fmt(e.c) : '–'}</b><small>פחמימה</small></i><i class="f"><b>${e.f != null ? fmt(e.f) : '–'}</b><small>שומן</small></i><i class="p"><b><bdi dir="ltr">${proteinText(e) || '–'}</bdi></b><small>חלבון</small></i></span>` : ''}
       <span class="pr-n grow">${k.esc(e.note || '')}</span>${k.ICON.chev}</button>`; };
   box.innerHTML = `
     ${coachCard()}
-    <button class="btn block" data-newplan style="margin-top:10px">${k.ICON.plus} טבלה ידנית</button>
-    <p class="note" style="margin:8px 4px 0">ביום שיש לו יעד מהטבלה, היומן משתמש בו. בשאר הימים: היעד מההגדרות.</p>
-    ${dates.length ? `<div class="pr-head"><span></span><span class="pr-v"><i>פחמימה</i><i>שומן</i><i>חלבון</i></span></div>` : ''}
+    <button class="btn block" data-newplan style="margin-top:10px">${k.ICON.plus} להזין טבלה בעצמי</button>
+    <p class="note" style="margin:8px 4px 0">כל שורה = יעד הכוכבים ליום אחד. היומן משתמש ביעד של אותו יום. ימים בלי שורה: היעד מההגדרות.</p>
     ${upcoming.length ? `<div class="section-title"><h2>עכשיו והלאה</h2></div><div class="list">${upcoming.map(row).join('')}</div>` : ''}
     ${past.length ? `<div class="section-title"><h2>קודם</h2><span class="muted small">${past.length} ימים</span></div><div class="list">${past.slice(0, 60).map(row).join('')}</div>` : ''}
     ${!dates.length ? '<div class="list" style="margin-top:12px"><div class="empty">עוד אין טבלת יעדים.<br>מזינים את הטבלה מלוליק, יום אחרי יום.</div></div>' : ''}`;
@@ -369,7 +373,7 @@ function tableSheet(pre) {
   const s = k.sheet(pre?.title || 'טבלת יעדים', `<div class="stack">
       ${pre?.reason ? `<div class="coach-why">${pre.reason}</div>` : ''}
       <label class="field"><span>יום ראשון בטבלה</span><input class="input" type="date" id="pt-start" value="${start}"></label>
-      <p class="note">שורה לכל יום, כמו בדף. חלבון: „4+” (לפחות 4) או „4-5”. יום בלי מספרים, רק הערה, גם בסדר („להשתדל להקפיד על החלבון”, „חופשה”). שורה חדשה מעתיקה את השומן והחלבון מהשורה הקודמת.</p>
+      <p class="note">שורה לכל יום, כמו בדף. חלבון: <bdi dir="ltr">4+</bdi> (לפחות 4) או <bdi dir="ltr">4-5</bdi> (טווח). יום בלי מספרים, רק הערה, גם בסדר („להשתדל להקפיד על החלבון”, „חופשה”). שורה חדשה מעתיקה את השומן והחלבון מהשורה הקודמת.</p>
       <div class="pt-head"><span></span><span>פחמימה</span><span>שומן</span><span>חלבון</span><span>הערה</span></div>
       <div id="pt-rows"></div>
       <button class="btn sm" data-addrow>${k.ICON.plus} יום</button>
@@ -475,16 +479,17 @@ function coachWeek() {
   const rows = cs.map((v, i) => { const dw = (K().toDate(start).getDay() + i) % 7; const isS = str.has(dw), after = str.has((dw + 6) % 7);
     return { c: v, f: 3, p: 4, plus: true, pMax: null, note: isS ? 'יום כוח' : after ? 'אחרי כוח' : 'אירובי? +1', aero: !isS }; });
   why.push(`השבוע: ממוצע ${fmt(avg)} כוכבי פחמימה ביום. שומן 3, חלבון לפחות 4 בכל יום. בימי ${[...str].sort().map(d => DOW_FULL[d]).join(' ו')} (כוח) יותר פחמימה. ביום עם אירובי מסמנים ביומן „יום אימון” ומקבלים +1 פחמימה.`);
-  return { start, rows, coach: { avg }, title: 'השבוע הבא מהמאמן', reason: why.map(x => `<p>${K().esc(x)}</p>`).join('') };
+  return { start, rows, coach: { avg }, title: 'יעדים לשבוע הקרוב', reason: why.map(x => `<p>${K().esc(x)}</p>`).join('') };
 }
 function coachCard() {
   const k = K(), c = N().coach, wr = weightRate();
   return `<div class="card coach">
-    <div class="row between"><b>המאמן האוטומטי</b><span class="muted small">${c.avg != null ? `ממוצע נוכחי ${fmt(c.avg)} פחמימה` : 'עוד לא נבנתה טבלה'}</span></div>
-    <div class="seg sm" style="margin-top:10px">${[['lose', 'ירידה בשומן'], ['keep', 'שמירה'], ['gain', 'עלייה']].map(([v, t]) => `<button data-goal="${v}" aria-pressed="${c.goal === v}">${t}</button>`).join('')}</div>
-    <div class="field" style="margin-top:10px"><span class="muted small">ימי כוח קבועים</span><div class="chips wrap">${DOW.map((d, i) => `<button class="chip" data-sday="${i}" aria-pressed="${(c.strength || []).includes(i)}">${d}</button>`).join('')}</div></div>
+    <div class="row between"><b>המאמן האוטומטי</b><span class="muted small">${c.avg != null ? `פחמימה: ${fmt(c.avg)} ★ ביום בממוצע` : 'עוד לא הוכנו יעדים'}</span></div>
+    <div class="muted small" style="margin-top:10px">המטרה</div><div class="seg sm" style="margin-top:4px">${[['lose', 'ירידה בשומן'], ['keep', 'שמירה'], ['gain', 'עלייה']].map(([v, t]) => `<button data-goal="${v}" aria-pressed="${c.goal === v}">${t}</button>`).join('')}</div>
+    <div class="field" style="margin-top:10px"><span class="muted small">ימי אימון כוח קבועים</span><div class="chips wrap">${DOW.map((d, i) => `<button class="chip" data-sday="${i}" aria-pressed="${(c.strength || []).includes(i)}">${d}</button>`).join('')}</div></div>
     <p class="note" style="margin:6px 0 10px">${wr ? `מגמת משקל: <bdi dir="ltr">${wr.pct >= 0 ? '+' : ''}${fmt(r2(wr.pct))}%</bdi> בשבוע` : 'כדי שהמאמן יתאים את הכמויות, כדאי להישקל פעם בשבוע (לשונית משקל).'}</p>
-    <button class="btn primary block" data-coach>בניית השבוע הבא</button>
+    <p class="coach-how">המאמן מכין לך <b>יעדי כוכבים לכל יום בשבוע הקרוב</b> (מיום ראשון): יותר פחמימה בימי הכוח, פחות בשאר הימים. הוא קובע את הכמות לפי מה שאכלת ולפי מגמת המשקל. לפני השמירה אפשר לשנות כל מספר.</p>
+    <button class="btn primary block" data-coach>הכנת יעדים לשבוע הקרוב</button>
   </div>`;
 }
 function bindCoach(rerender) {
@@ -497,18 +502,18 @@ function bindCoach(rerender) {
 /* progress: calories per day vs target, macro adherence, training vs rest days */
 function renderStats() {
   const k = K(), box = document.getElementById('nbody'), t = k.today();
-  const days = []; for (let i = range - 1; i >= 0; i--) { const d = addDays(t, -i), es = entriesOn(d), tot = totals(es), tg = targetFor(d); days.push({ d, logged: es.length > 0, tot, tg, kcal: kcalOf(tot), tk: kcalOf(tg), train: isTrain(d) }); }
+  const days = []; for (let i = range - 1; i >= 0; i--) { const d = addDays(t, -i), es = entriesOn(d), tot = totals(es), tg = targetFor(d); days.push({ d, logged: es.length > 0, tot, tg, kcal: energy(tot), tk: energy(tg), train: isTrain(d) }); }
   const logged = days.filter(x => x.logged), avg = (arr, f) => arr.length ? arr.reduce((a, x) => a + f(x), 0) / arr.length : 0;
   let streak = 0; for (let i = days.length - 1; i >= 0; i--) { if (days[i].logged) streak++; else if (i === days.length - 1) continue; else break; }
   const within = logged.filter(x => x.tk && Math.abs(x.kcal - x.tk) <= x.tk * .1).length;
   const tr = logged.filter(x => x.train), rs = logged.filter(x => !x.train);
   // bar chart
   const W = 320, H = 130, B = 22, T = 10, gap = range > 7 ? 2 : 8, bw = (W - gap * (range - 1)) / range;
-  const max = Math.max(...days.map(x => Math.max(x.kcal, x.tk)), 500) * 1.08, y = v => T + (H - B - T) * (1 - v / max);
+  const max = Math.max(...days.map(x => Math.max(x.kcal, x.tk)), showK() ? 500 : 8) * 1.08, y = v => T + (H - B - T) * (1 - v / max);
   const bars = days.map((x, i) => {
     const X = i * (bw + gap), dd = k.toDate(x.d);
     const lbl = range === 7 ? ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'][dd.getDay()] : (i % 5 === 4 || i === range - 1 ? `${dd.getDate()}/${dd.getMonth() + 1}` : '');
-    return `<g><rect x="${X.toFixed(1)}" y="${y(x.kcal).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - B - y(x.kcal)).toFixed(1)}" rx="${Math.min(3, bw / 3)}" class="${x.kcal > x.tk * 1.1 ? 'over' : ''}"><title>${k.fmtDate(x.d)}: ${k.kg(x.kcal)} / ${k.kg(x.tk)} קק״ל${x.train ? ' · יום אימון' : ''}</title></rect>
+    return `<g><rect x="${X.toFixed(1)}" y="${y(x.kcal).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - B - y(x.kcal)).toFixed(1)}" rx="${Math.min(3, bw / 3)}" class="${x.kcal > x.tk * 1.1 ? 'over' : ''}"><title>${k.fmtDate(x.d)}: ${efmt(x.kcal)} / ${efmt(x.tk)} ${EU()}${x.train ? ' · יום אימון' : ''}</title></rect>
       <rect x="${(X - 1).toFixed(1)}" y="${(y(x.tk) - 1).toFixed(1)}" width="${(bw + 2).toFixed(1)}" height="2.5" class="tg"/>
       ${x.train ? `<circle cx="${(X + bw / 2).toFixed(1)}" cy="${H - B + 6}" r="2.6" class="trd"/>` : ''}
       ${lbl ? `<text x="${(X + bw / 2).toFixed(1)}" y="${H - 3}" text-anchor="middle">${lbl}</text>` : ''}</g>`;
@@ -516,24 +521,24 @@ function renderStats() {
   box.innerHTML = `
     <div class="seg sm" style="margin-bottom:12px">${[[7, '7 ימים'], [30, '30 יום']].map(([v, t2]) => `<button data-range="${v}" aria-pressed="${range === v}">${t2}</button>`).join('')}</div>
     <div class="tiles" style="margin-bottom:10px">
-      <div class="stat"><b class="num">${k.kg(Math.round(avg(logged, x => x.kcal)))}</b><span>ממוצע קק״ל</span></div>
+      <div class="stat"><b class="num">${showK() ? efmt(avg(logged, x => x.kcal)) : fmt(Math.round(avg(logged, x => x.kcal) * 10) / 10)}</b><span>${showK() ? 'ממוצע קק״ל' : 'כוכבים ליום'}</span></div>
       <div class="stat"><b class="num"><bdi dir="ltr">${logged.length}/${range}</bdi></b><span>ימים מתועדים</span></div>
       <div class="stat"><b class="num">${within}</b><span>ימים ביעד ±10%</span></div>
       <div class="stat"><b class="num">${streak}</b><span>ימים ברצף</span></div>
     </div>
     <div class="card wk-card">
-      <div class="row between"><b>קלוריות ביום</b><span class="legend" style="margin:0"><span><i class="lg-tg"></i>יעד</span><span><i class="lg-tr"></i>יום אימון</span></span></div>
-      ${logged.length ? `<svg class="wbars nbars" viewBox="0 0 ${W} ${H}" role="img" aria-label="קלוריות בכל יום מול היעד">${bars}</svg>` : '<div class="chart-empty">עוד אין ימים מתועדים בטווח הזה</div>'}
+      <div class="row between"><b>${showK() ? 'קלוריות ביום' : 'כוכבים ביום (סה״כ)'}</b><span class="legend" style="margin:0"><span><i class="lg-tg"></i>יעד</span><span><i class="lg-tr"></i>יום אימון</span></span></div>
+      ${logged.length ? `<svg class="wbars nbars" viewBox="0 0 ${W} ${H}" role="img" aria-label="${showK() ? 'קלוריות' : 'כוכבים'} בכל יום מול היעד">${bars}</svg>` : '<div class="chart-empty">עוד אין ימים מתועדים בטווח הזה</div>'}
     </div>
     <div class="section-title"><h2>ממוצע מול היעד</h2><span class="muted small">בימים המתועדים</span></div>
     <div class="card nmacros">${MAC.map(([m, name]) => {
       const e = avg(logged, x => x.tot[m]), tg = avg(logged.length ? logged : days, x => x.tg[m]), pct = tg ? Math.min(100, e / tg * 100) : 0;
-      return `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s"><bdi dir="ltr"><b class="num">${fmt(e)}</b>/${fmt(tg)}</bdi> ★</span></div><div class="nbar"><i style="width:${pct.toFixed(1)}%"></i></div><div class="nm-g"><bdi dir="ltr">${Math.round(gramsOf(m, e))} / ${Math.round(gramsOf(m, tg))}</bdi> ג׳ ביום</div></div>`;
+      return `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s"><bdi dir="ltr"><b class="num">${fmt(e)}</b>/${fmt(tg)}</bdi> ★</span></div><div class="nbar"><i style="width:${pct.toFixed(1)}%"></i></div>${showK() ? `<div class="nm-g"><bdi dir="ltr">${Math.round(gramsOf(m, e))} / ${Math.round(gramsOf(m, tg))}</bdi> ג׳ ביום</div>` : ''}</div>`;
     }).join('')}</div>
-    <div class="section-title"><h2>ימי אימון מול מנוחה</h2></div>
-    <div class="card"><table class="pct-table ntbl"><tr><td></td><td class="muted small">ימי אימון (${tr.length})</td><td class="muted small">ימי מנוחה (${rs.length})</td></tr>
-      <tr><td>קלוריות</td><td class="num">${tr.length ? k.kg(Math.round(avg(tr, x => x.kcal))) : '—'}</td><td class="num">${rs.length ? k.kg(Math.round(avg(rs, x => x.kcal))) : '—'}</td></tr>
-      ${MAC.map(([m, name]) => `<tr><td>${name} ★</td><td class="num">${tr.length ? fmt(avg(tr, x => x.tot[m])) : '—'}</td><td class="num">${rs.length ? fmt(avg(rs, x => x.tot[m])) : '—'}</td></tr>`).join('')}
+    <div class="section-title"><h2>ימי אימון מול מנוחה</h2><span class="muted small">ממוצע כוכבים ביום</span></div>
+    <div class="card"><table class="pct-table ntbl"><tr><td></td><td class="muted small">אימון (${tr.length})</td><td class="muted small">מנוחה (${rs.length})</td></tr>
+      ${showK() ? `<tr><td>קלוריות</td><td class="num">${tr.length ? k.kg(Math.round(avg(tr, x => x.kcal))) : '—'}</td><td class="num">${rs.length ? k.kg(Math.round(avg(rs, x => x.kcal))) : '—'}</td></tr>` : ''}
+      ${MAC.map(([m, name]) => `<tr><td>${name}</td><td class="num">${tr.length ? fmt(avg(tr, x => x.tot[m])) : '—'}</td><td class="num">${rs.length ? fmt(avg(rs, x => x.tot[m])) : '—'}</td></tr>`).join('')}
     </table><p class="note" style="padding:8px 4px 0">יום אימון = יום שרשמת בו אימון (או שסימנת ידנית ביומן).</p></div>`;
   k.$$('[data-range]', box).forEach(b => b.onclick = () => { range = +b.dataset.range; renderStats(); });
 }
@@ -573,8 +578,9 @@ function settingsHTML() {
   const k = K(), n = N(), t = n.target;
   return `<div class="section-title" style="margin:8px 4px 0"><h2>תזונה</h2></div>
     <div class="card stack">
-      <label class="row"><span class="grow"><b style="font-weight:500">מעקב תזונה</b><span class="muted small" style="display:block">כוכבים, גרמים וקלוריות, מחובר לימי האימון</span></span><span class="toggle"><input type="checkbox" id="n-on" ${n.on ? 'checked' : ''}><span></span></span></label>
+      <label class="row"><span class="grow"><b style="font-weight:500">מעקב תזונה</b><span class="muted small" style="display:block">כוכבים לפי שיטת המאמן, מחובר לימי האימון</span></span><span class="toggle"><input type="checkbox" id="n-on" ${n.on ? 'checked' : ''}><span></span></span></label>
       ${n.on ? `
+      <label class="row"><span class="grow">הצגת קלוריות וגרמים<span class="muted small" style="display:block">כבוי: רואים רק כוכבים</span></span><span class="toggle"><input type="checkbox" id="n-kcal" ${n.showKcal ? 'checked' : ''}><span></span></span></label>
       <div class="field"><span>יעד יומי בכוכבים (מהמאמן/ת)</span>
         <div class="grid3">${MAC.map(([m, name]) => `<label class="field"><span>${name}</span><input class="input num" data-tg="${m}" type="number" inputmode="decimal" step="0.5" min="0" value="${t[m]}" style="text-align:center"></label>`).join('')}</div>
         <p class="note" id="n-tg-hint"></p></div>
@@ -592,6 +598,7 @@ function bindSettings() {
   const k = K(), n = N(), on = k.$('#n-on'); if (!on) return;
   on.onchange = () => { n.on = on.checked; save(); k.route(); if (n.on) k.toast('לשונית „תזונה” נוספה למטה'); };
   if (!n.on) return;
+  const kc = k.$('#n-kcal'); if (kc) kc.onchange = () => { n.showKcal = kc.checked; save(); };
   const hint = () => { const h = k.$('#n-tg-hint'); if (h) h.textContent = `≈ ${MAC.map(([m, name]) => `${name} ${Math.round(gramsOf(m, n.target[m]))} ג׳`).join(' · ')} · ${k.kg(kcalOf(n.target))} קק״ל ביום`; };
   k.$$('[data-tg]').forEach(i => i.onchange = () => { n.target[i.dataset.tg] = Math.max(0, parseFloat(i.value) || 0); save(); hint(); });
   k.$$('[data-cday]').forEach(i => i.onchange = () => { const v = parseFloat(i.value); n[i.dataset.cday] = isNaN(v) ? null : v; save(); });
@@ -656,19 +663,19 @@ function dayLine(date) {
   const n = N(); if (!n.on) return '';
   const k = K(), es = entriesOn(date); if (!es.length) return '';
   const tot = totals(es), tg = targetFor(date);
-  return `<div class="nday">${ICO.fork}<span>תזונה באותו יום: <bdi dir="ltr"><b class="num">${k.kg(kcalOf(tot))}</b>/${k.kg(kcalOf(tg))}</bdi> קק״ל</span>${chips(tot)}</div>`;
+  return `<div class="nday">${ICO.fork}<span>תזונה באותו יום: <bdi dir="ltr"><b class="num">${efmt(energy(tot))}</b>/${efmt(energy(tg))}</bdi> ${EU()}</span>${chips(tot)}</div>`;
 }
 
 window.KOACH_ROUTES = { food: render };
 /* ---------- for the combined home page ---------- */
 function dayStats(date) {
   const es = entriesOn(date), tot = totals(es), tg = targetFor(date);
-  return { logged: es.length > 0, kcal: kcalOf(tot), tk: kcalOf(tg), tot, tg, train: isTrain(date) };
+  return { logged: es.length > 0, kcal: energy(tot), tk: energy(tg), tot, tg, train: isTrain(date) };
 }
 function avgKcal(days) {
   const t = K().today(), v = [];
-  for (let i = 0; i < days; i++) { const d = addDays(t, -i), es = entriesOn(d); if (es.length) v.push(kcalOf(totals(es))); }
-  return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+  for (let i = 0; i < days; i++) { const d = addDays(t, -i), es = entriesOn(d); if (es.length) v.push(energy(totals(es))); }
+  return v.length ? (showK() ? Math.round : x => Math.round(x * 10) / 10)(v.reduce((a, b) => a + b, 0) / v.length) : null;
 }
 function weightNow() {
   const ws = [...N().weights].sort((a, b) => a.date.localeCompare(b.date)); if (!ws.length) return null;
@@ -678,7 +685,7 @@ function weightNow() {
 function todayHTML() {
   const k = K(), d = k.today(), st = dayStats(d), rem = st.tk - st.kcal;
   return `<div class="tt-h">${ICO.fork}<b>תזונה</b></div>
-    <div class="tf-row"><div class="nring-wrap sm">${ring(st.kcal, st.tk, 84)}<div class="nring-val"><b class="num">${k.kg(Math.abs(rem))}</b><span>${rem >= 0 ? 'נשארו' : 'מעל'}</span></div></div>
+    <div class="tf-row"><div class="nring-wrap sm">${ring(st.kcal, st.tk, 84)}<div class="nring-val"><b class="num">${efmt(Math.abs(rem))}${showK() ? '' : '★'}</b><span>${rem >= 0 ? 'נשארו' : 'מעל'}</span></div></div>
       <div class="tf-macros">${MAC.map(([m, name]) => `<div class="nm ${m}"><div class="row between"><span class="nm-n">${name}</span><span class="nm-s"><bdi dir="ltr"><b class="num">${fmt(st.tot[m])}</b>/${targetText(m, st.tg)}</bdi></span></div><div class="nbar"><i style="width:${(st.tg[m] ? Math.min(100, st.tot[m] / st.tg[m] * 100) : 0).toFixed(1)}%"></i></div></div>`).join('')}</div></div>`;
 }
 function goDay(date) { curDate = date; sub = 'day'; K().go('#/food'); if (location.hash === '#/food') render(); }
@@ -686,5 +693,5 @@ function goDay(date) { curDate = date; sub = 'day'; K().go('#/food'); if (locati
 // from the home screen's "+ אוכל": today's log with the add sheet open for the current meal
 function quickAddFood() { curDate = K().today(); sub = 'day'; K().go('#/food'); setTimeout(() => addSheet(mealNow()), 60); }
 
-window.KOACH_HOOKS = { homeCard, bindHome, dayLine, settingsHTML, bindSettings, quickAddFood, dayStats, avgKcal, weightNow, todayHTML, goDay, isTrain };
+window.KOACH_HOOKS = { showKcal: () => showK(), homeCard, bindHome, dayLine, settingsHTML, bindSettings, quickAddFood, dayStats, avgKcal, weightNow, todayHTML, goDay, isTrain };
 })();

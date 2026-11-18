@@ -250,13 +250,13 @@ function renderHome() {
       </div>
     </div>
     <div class="card week-card">
-      <div class="row between"><b>השבוע שלי</b><span class="muted small">${weekW.length} אימונים${nOn ? ' · טבעת = קלוריות' : ''}</span></div>
+      <div class="row between"><b>השבוע שלי</b><span class="muted small">${weekW.length} אימונים${nOn ? ` · טבעת = ${H.showKcal && H.showKcal() ? 'קלוריות' : 'כוכבים'}` : ''}</span></div>
       <div class="week-strip">${strip}</div>
     </div>
     <div class="tiles home-tiles">
       <div class="stat"><b class="num">${weekW.length}</b><span>אימונים השבוע</span></div>
       <div class="stat"><b class="num">${streak}</b><span>${streak === 1 ? 'שבוע ברצף' : 'שבועות ברצף'}</span></div>
-      ${nOn ? `<div class="stat"><b class="num">${avgK != null ? kg(avgK) : '—'}</b><span>קק״ל ממוצע</span></div>
+      ${nOn ? `<div class="stat"><b class="num">${avgK != null ? kg(avgK) : '—'}</b><span>${H.showKcal && H.showKcal() ? 'קק״ל ממוצע' : 'כוכבים ליום'}</span></div>
       <div class="stat"><b class="num">${wt ? kg(wt.kg) : '—'}</b><span>${wt && wt.d != null ? `משקל <bdi dir="ltr">${wt.d > 0 ? '+' : ''}${kg(wt.d)}</bdi>` : 'משקל גוף'}</span></div>`
       : `<div class="stat"><b class="num">${n}</b><span>סה״כ אימונים</span></div><div class="stat"><b class="num">${db.tests.length}</b><span>בדיקות RM</span></div>`}
     </div>
@@ -356,7 +356,7 @@ function renderLift(id) {
     <div class="top" style="--lc:${l.color}"><div><h1>${esc(l.name)}</h1></div></div>
     <div class="hero" style="--n:${RMS().length + 1}">
       ${RMS().map(r => { const t = latest(id, r); return `<div class="stat"><b class="num">${t ? kg(t.weight) : '—'}</b><span>${r}RM</span><em>${t ? fmtDate(t.date) : ''}</em></div>`; }).join('')}
-      <div class="stat"><b class="num">${best.e ? kg(Math.round(best.e * 2) / 2) : '—'}</b><span>שיא מאימון (לפי סט)</span><em>${best.e ? `${best.set.reps}×${kg(best.set.weight)}` : ''}</em></div>
+      <div class="stat"><b class="num">${best.e ? kg(Math.round(best.e * 2) / 2) : '—'}</b><span>שיא מאימון</span><em>${best.e ? `לפי <bdi dir="ltr">${best.set.reps}×${kg(best.set.weight)}</bdi>` : ''}</em></div>
     </div>
     ${best.e ? '<p class="note" style="margin:6px 2px 0">שיא מאימון: 1RM מחושב מהסט הכבד ביותר שרשמת באימונים, לא מבדיקה. לכן הוא יכול לצאת נמוך מה־RM שבדקת.</p>' : ''}
     <div class="section-title"><h2>התקדמות</h2></div>
@@ -447,7 +447,7 @@ function plot(box, color, layers, unit = 'ק״ג') {
   const P = p => [px(toDate(p.d).getTime()), py(p.v)];
   let g = '';
   for (let v = y0; v <= y1 + 1e-9; v += step) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${py(v)}" y2="${py(v)}"/><text x="${L - 6}" y="${py(v) + 4}" text-anchor="end">${kg(v)}</text>`;
-  const ticks = 4;
+  const ticks = range === 'all' || range === '1y' ? 3 : 4; // dates with a year are wider
   for (let i = 0; i <= ticks; i++) {
     const t = x0 + (x1 - x0) * i / ticks, d = new Date(t);
     g += `<text x="${px(t)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === ticks ? 'end' : 'middle'}">${d.getDate()}/${d.getMonth() + 1}${range === 'all' || range === '1y' ? '/' + String(d.getFullYear()).slice(2) : ''}</text>`;
