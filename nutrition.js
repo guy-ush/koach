@@ -657,6 +657,7 @@ function renderWeight() {
 const appLink = u => /^https:\/\/claude\.ai\/(chat\/[0-9a-f-]{36}|new)\b/i.test(u || '');
 function claudeHint(u) {
   if (!u) return 'מומלץ: קישור לשיחה בתוך הפרויקט „מעקב תזונה”. קישור לשיחה נפתח באפליקציית Claude. קישור לפרויקט נפתח בדפדפן.';
+  if (/claude\.ai\/share\//i.test(u)) return '⚠ זה קישור שיתוף (share): הוא פותח עותק לקריאה בלבד, בלי אפשרות לכתוב או לצלם. צריך את הקישור של השיחה עצמה, שמתחיל ב־https://claude.ai/chat/';
   if (appLink(u)) return '✓ הקישור הזה נפתח באפליקציית Claude (אם היא מותקנת).';
   return 'קישור לפרויקט נפתח בדפדפן, לא באפליקציה. כדי שייפתח באפליקציה: פתח בפרויקט שיחה אחת לצילומי אוכל, העתק את הקישור שלה (מתחיל ב־https://claude.ai/chat/) והדבק כאן.';
 }
