@@ -105,9 +105,10 @@ function render() {
   const view = document.getElementById('view');
   view.innerHTML = `
     <div class="top"><div><h1>תזונה</h1><p class="muted small">${showK() ? 'כוכבים · גרמים · קלוריות' : 'חלבון · שומן · פחמימה בכוכבים'}</p></div>
-      ${n.claudeUrl ? `<a class="btn sm" href="${k.esc(n.claudeUrl)}" target="_blank" rel="noopener">${ICO.cam} צילום ב־Claude</a>` : ''}</div>
+      <div class="row" style="gap:6px">${n.claudeUrl ? `<a class="btn sm" href="${k.esc(n.claudeUrl)}" target="_blank" rel="noopener">${ICO.cam} צילום ב־Claude</a>` : ''}<button class="btn sm" data-paste>📋 הדבקה</button></div></div>
     <div class="seg" style="margin-bottom:14px">${[['day', 'יומן'], ['plan', 'יעדים'], ['stats', 'התקדמות'], ['weight', 'משקל']].map(([v, t]) => `<button data-sub="${v}" aria-pressed="${sub === v}">${t}</button>`).join('')}</div>
     <div id="nbody"></div>`;
+  k.$('[data-paste]').onclick = () => pasteSheet(mealNow());
   k.$$('[data-sub]').forEach(b => b.onclick = () => { sub = b.dataset.sub; render(); });
   ({ day: renderDay, plan: renderPlan, stats: renderStats, weight: renderWeight })[sub]();
 }
@@ -185,7 +186,7 @@ function addSheet(meal, cont) {
       <div class="chips" id="n-meals">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
       <input class="input" id="n-q" placeholder="חיפוש מאכל…" autocomplete="off">
       <div id="n-res"></div>
-    </div>`, `<div class="row" style="gap:8px"><button class="btn block grow" data-manual>${k.ICON.plus} מהתווית או ידנית</button>${items.length ? `<button class="btn primary" data-done style="min-width:96px">סיום ✓</button>` : ''}</div>`);
+    </div>`, `<div class="row" style="gap:8px"><button class="btn block grow" data-manual>${k.ICON.plus} מהתווית או ידנית</button><button class="btn" data-paste2 aria-label="הדבקה מ־Claude">📋</button>${items.length ? `<button class="btn primary" data-done style="min-width:96px">סיום ✓</button>` : ''}</div>`);
   s.el.classList.add('full');
   const done = k.$('[data-done]', s.el); if (done) done.onclick = () => { basket = null; s.close(); k.toast(`נוספו ${items.length} פריטים`); };
   k.$$('[data-unbask]', s.el).forEach(b => b.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== b.dataset.unbask); basket.ids = basket.ids.filter(x => x !== b.dataset.unbask); save(); renderDay(); addSheet(pick(), true); });
@@ -215,6 +216,7 @@ function addSheet(meal, cont) {
   };
   k.$('#n-q', s.el).oninput = draw; draw();
   k.$('[data-manual]', s.el).onclick = () => manualSheet(pick());
+  k.$('[data-paste2]', s.el).onclick = () => pasteSheet(pick());
 }
 /* Converting grams of a macro into stars, the way the coach's food list does it:
    exact stars = grams / grams-per-star (protein 20, fat 10, carbs 25, per the InBalance method);
@@ -295,6 +297,68 @@ function amountSheet(f, meal, edit) {
   const del = k.$('[data-del]', s.el);
   if (del) del.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== edit.id); save(); s.close(); renderDay(); };
 }
+/* ---------- back from a meal photo in Claude ----------
+   The app can't read the Claude chat, so the project is told to end every answer with lines like
+   KOACH|פסטה מבושלת|170 גרם|0|0|2 (name | amount | protein | fat | carb stars); they are copied
+   from Claude and pasted here. */
+function claudePrompt() {
+  const g = N().grams;
+  return `כשאני שולח צילום של ארוחה (או מתאר מה אכלתי):
+1. זהה כל רכיב והערך את הכמות בגרמים.
+2. חשב כוכבים לפי שיטת InBalance: כוכב חלבון = ${g.p} ג׳ חלבון, כוכב שומן = ${g.f} ג׳ שומן, כוכב פחמימה = ${g.c} ג׳ פחמימה. עיגול: עד 0.3 כוכב לא נספר, 0.3 עד 0.4 = רבע, מעל זה לחצי הקרוב. ירקות חופשיים = 0.
+3. בסוף התשובה תן בלוק קוד אחד בלבד, שורה לכל רכיב, בפורמט הזה בדיוק:
+KOACH|שם המאכל|כמות|כוכבי חלבון|כוכבי שומן|כוכבי פחמימה
+לדוגמה:
+KOACH|פסטה מבושלת|170 גרם|0|0|2
+KOACH|רוטב עגבניות|100 גרם|0|0.5|0.5`;
+}
+function parseKoach(text) {
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(line => {
+    const parts = line.replace(/[`*]/g, '').split('|').map(x => x.trim());
+    if (/^koach$/i.test(parts[0] || '')) parts.shift(); else return;
+    if (parts.length < 5) return;
+    const st = parts.slice(2, 5).map(x => parseFloat(String(x).replace(',', '.')));
+    if (!parts[0] || st.some(v => isNaN(v) || v < 0 || v > 30)) return;
+    out.push({ name: parts[0], serving: parts[1] || '', p: st[0], f: st[1], c: st[2] });
+  });
+  return out;
+}
+function pasteSheet(meal) {
+  const k = K();
+  let items = [];
+  const s = k.sheet('הדבקה מ־Claude', `<div class="stack">
+      <p class="muted small">בצ׳אט עם Claude מעתיקים את בלוק השורות שמתחילות ב־KOACH, ומדביקים כאן.</p>
+      <button class="btn block" data-clip>📋 הדבקה מהלוח</button>
+      <textarea class="input" id="ps-text" rows="4" dir="rtl" placeholder="KOACH|פסטה מבושלת|170 גרם|0|0|2"></textarea>
+      <div id="ps-prev"></div>
+      <div class="chips">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
+      <details class="nadv"><summary>ההוראה לפרויקט ב־Claude (פעם אחת)</summary><div class="stack" style="margin-top:8px">
+        <p class="note">מדביקים את זה ב־Instructions של הפרויקט, כדי ש־Claude יסיים כל תשובה בשורות שהאפליקציה מבינה.</p>
+        <pre class="ps-prompt">${k.esc(claudePrompt())}</pre>
+        <button class="btn block" data-copyprompt>העתקת ההוראה</button></div></details>
+    </div>`, `<button class="btn primary block" data-ok disabled>הוספה ליומן</button>`);
+  const ta = k.$('#ps-text', s.el), ok = k.$('[data-ok]', s.el);
+  const draw = () => {
+    items = parseKoach(ta.value); const t = totals(items);
+    k.$('#ps-prev', s.el).innerHTML = items.length
+      ? `<div class="list">${items.map(e => `<div class="li"><div class="grow"><div class="t">${k.esc(e.name)}</div><div class="s">${k.esc(e.serving)}</div></div>${chips(e)}</div>`).join('')}</div>
+         <div class="row between" style="margin-top:8px"><b style="font-weight:500">סה״כ (${items.length})</b>${chips(t)}</div>`
+      : ta.value.trim() ? '<div class="empty">לא נמצאו שורות KOACH בטקסט. בדוק שהעתקת את הבלוק מהסוף של התשובה.</div>' : '';
+    ok.disabled = !items.length; ok.textContent = items.length ? `הוספה ליומן (${items.length})` : 'הוספה ליומן';
+  };
+  ta.oninput = draw;
+  k.$('[data-clip]', s.el).onclick = async () => { try { ta.value = await navigator.clipboard.readText(); draw(); } catch (e) { ta.focus(); k.toast('לחץ ארוכות בתיבה ובחר „הדבק”'); } };
+  k.$('[data-copyprompt]', s.el).onclick = async () => { try { await navigator.clipboard.writeText(claudePrompt()); k.toast('ההוראה הועתקה'); } catch (e) { k.toast('סמן את הטקסט והעתק ידנית'); } };
+  k.$$('[data-meal]', s.el).forEach(b => b.onclick = () => { meal = b.dataset.meal; k.$$('[data-meal]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)); });
+  ok.onclick = () => {
+    if (!items.length) return;
+    const n = N(), now = Date.now();
+    items.forEach((e, i) => n.log.push({ id: k.uid(), date: curDate || k.today(), meal, name: e.name, serving: e.serving, qty: 1, p: e.p, f: e.f, c: e.c, src: 'claude', at: now + i }));
+    save(); s.close(); renderDay(); k.toast(`נוספו ${items.length} פריטים ל${meal}`);
+  };
+}
+
 function entrySheet(e) {
   if (!e) return;
   basket = null;

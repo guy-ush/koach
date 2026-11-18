@@ -533,3 +533,6 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .basket-items{display:flex;flex-wrap:wrap;gap:6px}
 .bk-i{display:inline-flex;align-items:center;gap:4px;background:var(--surface);border-radius:99px;padding:3px 4px 3px 10px;font-size:13.5px}
 .bk-i button{border:0;background:var(--surface-2);color:var(--muted);width:22px;height:22px;border-radius:50%;font-size:15px;line-height:1;padding:0}
+
+.ps-prompt{white-space:pre-wrap;font-family:inherit;font-size:12.5px;background:var(--surface-2);border-radius:12px;padding:10px;margin:0;max-height:220px;overflow:auto;direction:rtl;unicode-bidi:plaintext}
+#ps-text{font-size:14px;min-height:90px;resize:vertical}
