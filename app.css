@@ -527,3 +527,9 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .plan-row .pr-v i small{font-size:10.5px;color:var(--muted);margin-top:2px}
 .coach-how{font-size:13px;color:var(--muted);margin:0 0 10px;line-height:1.5}
 .coach-how b{color:var(--text);font-weight:500}
+
+.basket{background:var(--accent-soft);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.basket b{font-weight:500}
+.basket-items{display:flex;flex-wrap:wrap;gap:6px}
+.bk-i{display:inline-flex;align-items:center;gap:4px;background:var(--surface);border-radius:99px;padding:3px 4px 3px 10px;font-size:13.5px}
+.bk-i button{border:0;background:var(--surface-2);color:var(--muted);width:22px;height:22px;border-radius:50%;font-size:15px;line-height:1;padding:0}

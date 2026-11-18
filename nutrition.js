@@ -171,14 +171,24 @@ function undoBar(msg, onUndo) {
 }
 
 /* add food: search, recent, favourites, library, manual */
-function addSheet(meal) {
+// several foods in one go (yogurt + a spoon of honey): after each one the add sheet comes back,
+// showing what was added so far, until "סיום"
+let basket = null;
+function addSheet(meal, cont) {
   const k = K();
+  if (!cont || !basket) basket = { ids: [] };
+  const items = N().log.filter(e => basket.ids.includes(e.id)), bt = totals(items);
   const s = k.sheet('הוספת אוכל', `<div class="stack" style="gap:10px">
+      ${items.length ? `<div class="basket"><div class="row between"><b>נוסף עכשיו (${items.length})</b>${chips(bt)}</div>
+        <div class="basket-items">${items.map(e => `<span class="bk-i">${k.esc(e.name)}<button data-unbask="${e.id}" aria-label="הסרה">×</button></span>`).join('')}</div>
+        <div class="muted small">אפשר לבחור עוד מאכל, וכשמסיימים ללחוץ סיום</div></div>` : ''}
       <div class="chips" id="n-meals">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
       <input class="input" id="n-q" placeholder="חיפוש מאכל…" autocomplete="off">
       <div id="n-res"></div>
-    </div>`, `<button class="btn block" data-manual>${k.ICON.plus} מהתווית או ידנית (גרמים / כוכבים)</button>`);
+    </div>`, `<div class="row" style="gap:8px"><button class="btn block grow" data-manual>${k.ICON.plus} מהתווית או ידנית</button>${items.length ? `<button class="btn primary" data-done style="min-width:96px">סיום ✓</button>` : ''}</div>`);
   s.el.classList.add('full');
+  const done = k.$('[data-done]', s.el); if (done) done.onclick = () => { basket = null; s.close(); k.toast(`נוספו ${items.length} פריטים`); };
+  k.$$('[data-unbask]', s.el).forEach(b => b.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== b.dataset.unbask); basket.ids = basket.ids.filter(x => x !== b.dataset.unbask); save(); renderDay(); addSheet(pick(), true); });
   const pick = () => s.el.querySelector('[data-meal][aria-pressed="true"]').dataset.meal;
   k.$$('[data-meal]', s.el).forEach(b => b.onclick = () => k.$$('[data-meal]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)));
   const row = f => `<div class="li nf"><button class="nf-main" data-pick="${k.esc(f.id)}"><div class="t">${k.esc(f.name)}</div><div class="s">${k.esc(f.serving || '')}${f.note ? ` · ${k.esc(f.note)}` : ''}</div></button>
@@ -277,14 +287,17 @@ function amountSheet(f, meal, edit) {
       }
     }
     if (edit) { Object.assign(edit, fields, { meal }); Object.keys(edit).forEach(x => edit[x] === undefined && delete edit[x]); }
-    else { const e = { id: k.uid(), date: curDate, meal, name: f.name, serving: f.serving || '', p: f.p || 0, f: f.f || 0, c: f.c || 0, ...fields, at: Date.now() }; Object.keys(e).forEach(x => e[x] === undefined && delete e[x]); n.log.push(e); }
-    save(); s.close(); renderDay(); if (!edit) k.toast(`נוסף: ${f.name}`);
+    else { const e = { id: k.uid(), date: curDate, meal, name: f.name, serving: f.serving || '', p: f.p || 0, f: f.f || 0, c: f.c || 0, ...fields, at: Date.now() }; Object.keys(e).forEach(x => e[x] === undefined && delete e[x]); n.log.push(e); if (basket) basket.ids.push(e.id); }
+    save(); renderDay();
+    if (!edit && basket) return addSheet(meal, true);
+    s.close(); if (!edit) k.toast(`נוסף: ${f.name}`);
   };
   const del = k.$('[data-del]', s.el);
   if (del) del.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== edit.id); save(); s.close(); renderDay(); };
 }
 function entrySheet(e) {
   if (!e) return;
+  basket = null;
   amountSheet({ name: e.name, serving: e.serving, p: e.p, f: e.f, c: e.c, p100: e.p100, f100: e.f100, c100: e.c100, g: e.grams, note: e.fixed ? 'תוקן ידנית' : '' }, e.meal, e);
 }
 function manualSheet(meal) {
@@ -329,8 +342,10 @@ function manualSheet(meal) {
     const per = label ? { p100: v.p, f100: v.f, c100: v.c } : {};
     if (k.$('#m-keep', s.el).checked && !library().some(f => f.name === name))
       n.foods.unshift({ id: 'u' + k.uid(), name, serving: label ? '100 גרם' : serving, ...(label ? starsFromGrams(labelGrams(v, 100)) : st), ...per, ...(label ? { g: grams } : {}), note: '' });
-    n.log.push({ id: k.uid(), date: curDate, meal, name, serving, qty: 1, ...st, ...per, ...(label ? { grams } : {}), at: Date.now() });
-    save(); s.close(); renderDay(); k.toast(`נוסף: ${name}`);
+    const id = k.uid(); n.log.push({ id, date: curDate, meal, name, serving, qty: 1, ...st, ...per, ...(label ? { grams } : {}), at: Date.now() });
+    save(); renderDay();
+    if (basket) { basket.ids.push(id); return addSheet(meal, true); }
+    s.close(); k.toast(`נוסף: ${name}`);
   };
 }
 
