@@ -741,7 +741,7 @@ function settingsHTML() {
         <label class="field"><span>קישור לשיחה ב־Claude (לצילום אוכל)</span><input class="input" id="n-claude" dir="ltr" placeholder="https://claude.ai/chat/…" value="${k.esc(n.claudeUrl || '')}"></label>
         <p class="note" id="n-claude-hint">${claudeHint(n.claudeUrl)}</p>
         <label class="field"><span>שמירה גם ב־Notion (כתובת Webhook של Make)</span><input class="input" id="n-sync" dir="ltr" placeholder="https://hook.eu2.make.com/…" value="${k.esc(n.sync?.url || '')}"></label>
-        <p class="note">${n.sync?.url ? `✓ כל רישום אוכל חדש נשלח גם ל־Notion${n.sync.last ? ` · נשלח לאחרונה ${new Date(n.sync.last).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}. עריכה או מחיקה אחרי השליחה לא מתעדכנות שם.` : 'ריק = בלי Notion. רישומים ישנים לא נשלחים, רק מה שנרשם מעכשיו.'}</p>
+        <p class="note">${n.sync?.url ? `✓ כל רישום אוכל חדש נשלח גם ל־Notion${n.sync.last ? ` · נשלח לאחרונה ${new Date(n.sync.last).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}. עריכה או מחיקה אחרי השליחה לא מתעדכנות שם.<br><button class="btn sm" data-sync-today style="margin-top:6px">שליחת הרישומים של היום שעוד לא נשלחו</button>` : 'ריק = בלי Notion. רישומים ישנים לא נשלחים, רק מה שנרשם מעכשיו.'}</p>
       </div></details>` : ''}
     </div>`;
 }
@@ -756,6 +756,13 @@ function bindSettings() {
   k.$$('[data-gps]').forEach(i => i.onchange = () => { n.grams[i.dataset.gps] = Math.max(1, parseFloat(i.value) || n.grams[i.dataset.gps]); save(); hint(); });
   const mi = k.$('#n-meals-in'); if (mi) mi.onchange = () => { const m = mi.value.split(/[,،]/).map(x => x.trim()).filter(Boolean); n.meals = m.length ? m : DEFAULT_MEALS.slice(); save(); };
   const sy = k.$('#n-sync'); if (sy) sy.onchange = () => { const v = sy.value.trim(); if (v && !/^https:\/\/hook\.[a-z0-9.]*make\.com\//.test(v)) { k.toast('צריך כתובת Webhook של Make'); return; } n.sync = v ? { url: v, since: n.sync?.url === v ? n.sync.since : Date.now(), done: n.sync?.done || [] } : null; save(); k.route(); if (v) k.toast('מעכשיו כל רישום אוכל יישלח גם ל־Notion'); };
+  const st2 = k.$('[data-sync-today]'); if (st2) st2.onclick = () => {
+    const t0 = k.toDate(k.today()).getTime(), done = new Set(n.sync.done || []);
+    const todo = n.log.filter(e => e.date === k.today() && !done.has(e.id) && e.src !== 'notion');
+    if (!todo.length) return k.toast('כל הרישומים של היום כבר נשלחו');
+    todo.forEach(e => { if ((e.at || 0) < n.sync.since) e.at = Math.max(e.at || 0, n.sync.since); });
+    save(); syncNow(); k.toast(`נשלחים ${todo.length} רישומים ל־Notion`);
+  };
   const cl = k.$('#n-claude'); if (cl) cl.onchange = () => { const v = cl.value.trim(); n.claudeUrl = /^https:\/\//.test(v) ? v : ''; if (v && !n.claudeUrl) k.toast('קישור צריך להתחיל ב־https://'); save(); const h = k.$('#n-claude-hint'); if (h) h.innerHTML = claudeHint(n.claudeUrl); };
   k.$('[data-plan]').onclick = planSheet;
   hint();
