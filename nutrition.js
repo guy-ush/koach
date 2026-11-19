@@ -176,7 +176,7 @@ function renderDay() {
       </div>`;
     }).join('')}
     ${list.length ? `<button class="btn block ghost" data-copyday style="margin-top:6px">📋 העתקת היום כטקסט</button>` : ''}
-    <div class="save-bar"><button class="btn primary block" data-add="">${k.ICON.plus} הוספת אוכל</button></div>`;
+    <div class="save-bar flow"><button class="btn primary block" data-add="">${k.ICON.plus} הוספת אוכל</button></div>`;
   k.$$('[data-d]').forEach(b => b.onclick = () => { curDate = addDays(curDate, +b.dataset.d); renderDay(); });
   k.$('[data-today]').onclick = () => { curDate = k.today(); renderDay(); };
   const cd = k.$('[data-copyday]'); if (cd) cd.onclick = () => copyDay(curDate);
