@@ -558,3 +558,6 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .nring-wrap.sm .nring circle{stroke-width:8}
 .today-food .nring .trk{stroke:var(--line)}
 .today-food .nbar{background:var(--line)}
+
+.sc-steps{margin:8px 0 0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.5}
+.sc-steps code{font-family:ui-monospace,monospace;font-size:12.5px;background:var(--surface-2);padding:0 4px;border-radius:4px;direction:ltr;unicode-bidi:isolate}

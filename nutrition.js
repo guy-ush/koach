@@ -20,7 +20,7 @@ function N() {
   if (!db.nutrition) db.nutrition = {};
   const n = db.nutrition;
   const def = { on: false, grams: { p: 20, f: 10, c: 25 }, target: { p: 4, f: 3, c: 5 }, cTrain: null, cRest: null,
-    meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null, plan: {}, showKcal: false, coach: { goal: 'lose', strength: [1, 5], avg: null, last: null } };
+    meals: DEFAULT_MEALS.slice(), foods: [], fav: [], log: [], weights: [], claudeUrl: '', dayType: {}, body: null, plan: {}, health: {}, showKcal: false, coach: { goal: 'lose', strength: [1, 5], avg: null, last: null } };
   for (const k in def) if (n[k] === undefined || n[k] === null && def[k] !== null) n[k] = def[k];
   if (!n.c25) { if (n.grams.c === 20) n.grams.c = 25; n.c25 = true; } // the coach's method: a carb star is 25 g
   return n;
@@ -70,7 +70,10 @@ const EU = () => showK() ? 'קק״ל' : '★';
 const efmt = v => showK() ? K().kg(Math.round(v)) : fmt(v);
 const addDays = (iso, n) => { const d = K().toDate(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const workoutsOn = date => K().db.workouts.filter(w => w.date === date);
-const isTrain = date => { const t = N().dayType[date]; return t ? t === 'train' : workoutsOn(date).length > 0; };
+// workouts from Apple Health (pasted through the Shortcuts bridge): {date: [{type, min, kcal}]}
+const healthOn = date => (N().health?.[date] || []).filter(a => a.min >= 15);
+const autoTrain = date => workoutsOn(date).length > 0 || healthOn(date).length > 0;
+const isTrain = date => { const t = N().dayType[date]; return t ? t === 'train' : autoTrain(date); };
 /* Coach's day-by-day plan (Lulik's table): carbs change daily, fat is usually fixed, protein is a
    minimum ("4+") or a range ("4-5"); some days carry only a note ("להשתדל להקפיד על החלבון", "חופשה"). */
 function parseProtein(txt) {
@@ -150,7 +153,7 @@ function renderDay() {
   const k = K(), n = N(), box = document.getElementById('nbody');
   const list = entriesOn(curDate), tot = totals(list), tg = targetFor(curDate);
   const eatK = energy(tot), tgK = energy(tg), rem = tgK - eatK, tr = isTrain(curDate), wos = workoutsOn(curDate);
-  const woNames = [...new Set(wos.flatMap(w => w.items.map(i => k.LIFT(i.lift).name)))];
+  const woNames = [...new Set([...wos.flatMap(w => w.items.map(i => k.LIFT(i.lift).name)), ...healthOn(curDate).map(a => `⌚ ${a.type} ${Math.round(a.min)} דק׳`)])];
   box.innerHTML = `
     <div class="datebar"><button class="icon-btn" data-d="-1" aria-label="יום קודם">${k.ICON.back}</button>
       <button class="d" data-today>${dayLabel(curDate)}<small>${k.fmtDate(curDate)}</small></button>
@@ -178,7 +181,7 @@ function renderDay() {
   k.$('[data-today]').onclick = () => { curDate = k.today(); renderDay(); };
   const cd = k.$('[data-copyday]'); if (cd) cd.onclick = () => copyDay(curDate);
   k.$('[data-daytype]').onclick = () => {
-    const auto = workoutsOn(curDate).length > 0, cur = isTrain(curDate), next = cur ? 'rest' : 'train';
+    const auto = autoTrain(curDate), cur = isTrain(curDate), next = cur ? 'rest' : 'train';
     if ((next === 'train') === auto) delete n.dayType[curDate]; else n.dayType[curDate] = next;
     save(); renderDay();
   };
@@ -384,38 +387,95 @@ function parseKoach(text) {
   });
   return out;
 }
+/* ---------- Apple Health through an iOS Shortcut ----------
+   The shortcut copies lines like  KOACHW|2026-11-19|87.9  (body weight) and
+   KOACHA|2026-11-19|ריצה|35 min|320 kcal  (a workout: type, duration, active energy). */
+const firstNum = v => { const m = String(v ?? '').replace(',', '.').match(/\d+(?:\.\d+)?/); return m ? parseFloat(m[0]) : null; };
+function parseDate(v) {
+  const t = String(v || '').trim();
+  let m = t.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = t.match(/(\d{1,2})[./](\d{1,2})[./](\d{2,4})/); if (m) return `${m[3].length === 2 ? '20' + m[3] : m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+function parseMinutes(v) {
+  const t = String(v ?? '').replace(',', '.').trim(); if (!t) return null;
+  let m = t.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/); if (m) return m[3] != null ? +m[1] * 60 + +m[2] + +m[3] / 60 : +m[1] + +m[2] / 60;
+  const h = t.match(/(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|שע)/i), mi = t.match(/(\d+(?:\.\d+)?)\s*(m|min|mins|minutes|דק)/i), sec = t.match(/(\d+(?:\.\d+)?)\s*(s|sec|שנ)/i);
+  if (h || mi || sec) return (h ? +h[1] * 60 : 0) + (mi ? +mi[1] : 0) + (sec ? +sec[1] / 60 : 0);
+  const n = firstNum(t); return n == null ? null : n > 300 ? n / 60 : n; // a bare number: minutes, or seconds if large
+}
+function parseHealth(text) {
+  const weights = [], acts = [];
+  String(text || '').split(/\r?\n/).forEach(line => {
+    const p = line.replace(/[`*]/g, '').split('|').map(x => x.trim());
+    const tag = (p[0] || '').toUpperCase();
+    if (tag === 'KOACHW') { const d = parseDate(p[1]), kg = firstNum(p[2]); if (d && kg > 25 && kg < 350) weights.push({ date: d, kg: Math.round(kg * 10) / 10 }); }
+    if (tag === 'KOACHA') { const d = parseDate(p[1]), min = parseMinutes(p[3]); if (d && min > 0 && min < 1000) acts.push({ date: d, type: (p[2] || 'אימון').slice(0, 40), min: Math.round(min), kcal: firstNum(p[4]) }); }
+  });
+  // one weight per day (the last one listed wins)
+  const byDay = new Map(); weights.forEach(w => byDay.set(w.date, w));
+  return { weights: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)), acts };
+}
+const SHORTCUT_STEPS = [
+  'פותחים את אפליקציית <b>קיצורים</b> ← <b>+</b> ← שם: „Koach מבריאות”.',
+  '<b>מציאת דגימות בריאות</b> (Find Health Samples): סוג = <b>משקל גוף</b>, תאריך התחלה = ב־14 הימים האחרונים, יחידה = ק״ג.',
+  '<b>חזור עם כל אחד</b> (Repeat with Each) ← בפנים <b>טקסט</b>: <code>KOACHW|</code> + תאריך ההתחלה (עיצוב מותאם: <code>yyyy-MM-dd</code>) + <code>|</code> + ערך.',
+  '<b>מציאת אימונים</b> (Find Workouts): תאריך התחלה = ב־14 הימים האחרונים.',
+  '<b>חזור עם כל אחד</b> ← בפנים <b>טקסט</b>: <code>KOACHA|</code> + תאריך ההתחלה (<code>yyyy-MM-dd</code>) + <code>|</code> + סוג + <code>|</code> + משך + <code>|</code> + אנרגיה פעילה.',
+  '<b>שילוב טקסט</b> (Combine Text) של שתי הלולאות, בשורות נפרדות ← <b>העתקה ללוח</b> (Copy to Clipboard).',
+  'מריצים את הקיצור (אפשר גם להוסיף אותו למסך הבית או לתזמן כל בוקר באוטומציות) ← באפליקציה: <b>📋 הדבקה</b> ← הדבקה מהלוח.'
+];
+
 function pasteSheet(meal) {
   const k = K();
   let items = [];
-  const s = k.sheet('הדבקה מ־Claude', `<div class="stack">
-      <p class="muted small">בצ׳אט עם Claude מעתיקים את בלוק השורות שמתחילות ב־KOACH, ומדביקים כאן.</p>
+  let hl = { weights: [], acts: [] };
+  const s = k.sheet('הדבקה', `<div class="stack">
+      <p class="muted small">מדביקים כאן את שורות ה־KOACH מ־Claude (אוכל), או את מה שהקיצור מבריאות של אפל העתיק (משקל ואימונים).</p>
       <button class="btn block" data-clip>📋 הדבקה מהלוח</button>
       <textarea class="input" id="ps-text" rows="4" dir="rtl" placeholder="KOACH|פסטה מבושלת|170 גרם|0|0|2"></textarea>
       <div id="ps-prev"></div>
-      <div class="chips">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
+      <div class="chips" id="ps-meals">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
       <details class="nadv"><summary>ההוראה לפרויקט ב־Claude (פעם אחת)</summary><div class="stack" style="margin-top:8px">
         <p class="note">מדביקים את זה ב־Instructions של הפרויקט, כדי ש־Claude יסיים כל תשובה בשורות שהאפליקציה מבינה.</p>
         <pre class="ps-prompt">${k.esc(claudePrompt())}</pre>
         <button class="btn block" data-copyprompt>העתקת ההוראה</button></div></details>
+      <details class="nadv"><summary>קיצור לבריאות של אפל (משקל ואימונים)</summary><ol class="sc-steps">${SHORTCUT_STEPS.map(x => `<li>${x}</li>`).join('')}</ol></details>
     </div>`, `<button class="btn primary block" data-ok disabled>הוספה ליומן</button>`);
   const ta = k.$('#ps-text', s.el), ok = k.$('[data-ok]', s.el);
   const draw = () => {
-    items = parseKoach(ta.value); const t = totals(items);
-    k.$('#ps-prev', s.el).innerHTML = items.length
-      ? `<div class="list">${items.map(e => `<div class="li"><div class="grow"><div class="t">${k.esc(e.name)}</div><div class="s">${k.esc(e.serving)}</div></div>${chips(e)}</div>`).join('')}</div>
-         <div class="row between" style="margin-top:8px"><b style="font-weight:500">סה״כ (${items.length})</b>${chips(t)}</div>`
-      : ta.value.trim() ? '<div class="empty">לא נמצאו שורות KOACH בטקסט. בדוק שהעתקת את הבלוק מהסוף של התשובה.</div>' : '';
-    ok.disabled = !items.length; ok.textContent = items.length ? `הוספה ליומן (${items.length})` : 'הוספה ליומן';
+    items = parseKoach(ta.value); hl = parseHealth(ta.value); const t = totals(items);
+    const any = items.length + hl.weights.length + hl.acts.length;
+    k.$('#ps-prev', s.el).innerHTML = (items.length
+      ? `<div class="nsec">אוכל</div><div class="list">${items.map(e => `<div class="li"><div class="grow"><div class="t">${k.esc(e.name)}</div><div class="s">${k.esc(e.serving)}</div></div>${chips(e)}</div>`).join('')}</div>
+         <div class="row between" style="margin-top:8px"><b style="font-weight:500">סה״כ (${items.length})</b>${chips(t)}</div>` : '')
+      + (hl.weights.length ? `<div class="nsec">שקילות מבריאות</div><div class="list">${hl.weights.map(w => `<div class="li"><div class="grow"><div class="t">${k.fmtLong(w.date)}</div></div><span class="v">${k.kg(w.kg)} ק״ג</span></div>`).join('')}</div>` : '')
+      + (hl.acts.length ? `<div class="nsec">אימונים מבריאות</div><div class="list">${hl.acts.map(a => `<div class="li"><div class="grow"><div class="t">⌚ ${k.esc(a.type)}</div><div class="s">${k.fmtDate(a.date)}</div></div><span class="v">${a.min} דק׳${a.kcal ? ` · ${Math.round(a.kcal)} קק״ל` : ''}</span></div>`).join('')}</div>` : '')
+      + (!any && ta.value.trim() ? '<div class="empty">לא נמצאו שורות שהאפליקציה מבינה (KOACH / KOACHW / KOACHA).</div>' : '');
+    k.$('#ps-meals', s.el).hidden = !items.length && (hl.weights.length + hl.acts.length) > 0;
+    ok.disabled = !any; ok.textContent = any ? `הוספה (${any})` : 'הוספה';
   };
   ta.oninput = draw;
   k.$('[data-clip]', s.el).onclick = async () => { try { ta.value = await navigator.clipboard.readText(); draw(); } catch (e) { ta.focus(); k.toast('לחץ ארוכות בתיבה ובחר „הדבק”'); } };
   k.$('[data-copyprompt]', s.el).onclick = async () => { try { await navigator.clipboard.writeText(claudePrompt()); k.toast('ההוראה הועתקה'); } catch (e) { k.toast('סמן את הטקסט והעתק ידנית'); } };
   k.$$('[data-meal]', s.el).forEach(b => b.onclick = () => { meal = b.dataset.meal; k.$$('[data-meal]', s.el).forEach(x => x.setAttribute('aria-pressed', x === b)); });
   ok.onclick = () => {
-    if (!items.length) return;
-    const n = N(), now = Date.now();
+    const n = N(), now = Date.now(), msg = [];
+    if (!items.length && !hl.weights.length && !hl.acts.length) return;
     items.forEach((e, i) => n.log.push({ id: k.uid(), date: curDate || k.today(), meal, name: e.name, serving: e.serving, qty: 1, p: e.p, f: e.f, c: e.c, src: 'claude', at: now + i }));
-    save(); s.close(); renderDay(); k.toast(`נוספו ${items.length} פריטים ל${meal}`);
+    if (items.length) msg.push(`${items.length} פריטים ל${meal}`);
+    if (hl.weights.length) { // the scale wins over an earlier entry on the same day
+      const days = new Set(hl.weights.map(w => w.date));
+      n.weights = n.weights.filter(w => !days.has(w.date)).concat(hl.weights.map(w => ({ id: k.uid(), date: w.date, kg: w.kg, src: 'health' })));
+      msg.push(`${hl.weights.length} שקילות`);
+    }
+    if (hl.acts.length) { // a day's pasted list replaces what was pasted for it before
+      if (!n.health) n.health = {};
+      const by = {}; hl.acts.forEach(a => (by[a.date] = by[a.date] || []).push({ type: a.type, min: a.min, kcal: a.kcal }));
+      Object.entries(by).forEach(([d, list]) => { n.health[d] = list; });
+      msg.push(`${hl.acts.length} אימונים מהשעון`);
+    }
+    save(); s.close(); render(); k.toast(`נוספו ${msg.join(', ')}`);
   };
 }
 

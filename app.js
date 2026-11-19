@@ -1034,6 +1034,7 @@ function mergeIn(d) {
     else {
       ['log', 'weights', 'foods'].forEach(k => { mine[k] = byId(mine[k] || [], d.nutrition[k] || []); });
       if (d.nutrition.plan) mine.plan = { ...d.nutrition.plan, ...(mine.plan || {}) }; // keep targets already on the phone
+      if (d.nutrition.health) mine.health = { ...d.nutrition.health, ...(mine.health || {}) };
       mine.fav = [...new Set([...(mine.fav || []), ...(d.nutrition.fav || [])])];
       if (!mine.on && d.nutrition.on) mine.on = true;
     }
