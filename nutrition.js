@@ -221,7 +221,7 @@ function addSheet(meal, cont) {
       <div class="chips" id="n-meals">${N().meals.map(m => `<button class="chip" data-meal="${k.esc(m)}" aria-pressed="${m === meal}">${k.esc(m)}</button>`).join('')}</div>
       <input class="input" id="n-q" placeholder="חיפוש מאכל…" autocomplete="off">
       <div id="n-res"></div>
-    </div>`, `<div class="row" style="gap:8px"><button class="btn block grow" data-manual>${k.ICON.plus} מהתווית או ידנית</button><button class="btn" data-paste2 aria-label="הדבקה מ־Claude">📋</button>${items.length ? `<button class="btn primary" data-done style="min-width:96px">סיום ✓</button>` : ''}</div>`);
+    </div>`, `<div class="row" style="gap:8px"><button class="btn block grow" data-manual>${k.ICON.plus} ידני / תווית</button><button class="btn" data-paste2 aria-label="הדבקה מ־Claude">📋</button>${items.length ? `<button class="btn primary" data-done style="min-width:96px">סיום ✓</button>` : ''}</div>`);
   s.el.classList.add('full');
   const done = k.$('[data-done]', s.el); if (done) done.onclick = () => { basket = null; s.close(); k.toast(`נוספו ${items.length} פריטים`); };
   k.$$('[data-unbask]', s.el).forEach(b => b.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== b.dataset.unbask); basket.ids = basket.ids.filter(x => x !== b.dataset.unbask); save(); renderDay(); addSheet(pick(), true); });
@@ -734,14 +734,14 @@ function settingsHTML() {
         <p class="note" id="n-tg-hint"></p></div>
       <div class="field"><span>פחמימה ביום אימון / ביום מנוחה (לא חובה)</span>
         <div class="row" style="gap:8px"><input class="input num" data-cday="cTrain" type="number" inputmode="decimal" step="0.5" min="0" value="${n.cTrain ?? ''}" placeholder="אימון" style="text-align:center"><input class="input num" data-cday="cRest" type="number" inputmode="decimal" step="0.5" min="0" value="${n.cRest ?? ''}" placeholder="מנוחה" style="text-align:center"></div></div>
-      <button class="btn block" data-plan>חישוב יעד לפי גיל, גובה, משקל ומטרה</button>
+      <button class="btn block" data-plan>חישוב יעד לפי הנתונים שלי</button>
       <details class="nadv"><summary>הגדרות מתקדמות</summary><div class="stack" style="margin-top:10px">
         <div class="field"><span>גרמים לכוכב</span><div class="grid3">${MAC.map(([m, name]) => `<label class="field"><span>${name}</span><input class="input num" data-gps="${m}" type="number" inputmode="decimal" step="1" min="1" value="${n.grams[m]}" style="text-align:center"></label>`).join('')}</div></div>
         <label class="field"><span>ארוחות (מופרדות בפסיק)</span><input class="input" id="n-meals-in" value="${k.esc(n.meals.join(', '))}"></label>
         <label class="field"><span>קישור לשיחה ב־Claude (לצילום אוכל)</span><input class="input" id="n-claude" dir="ltr" placeholder="https://claude.ai/chat/…" value="${k.esc(n.claudeUrl || '')}"></label>
         <p class="note" id="n-claude-hint">${claudeHint(n.claudeUrl)}</p>
         <label class="field"><span>שמירה גם ב־Notion (כתובת Webhook של Make)</span><input class="input" id="n-sync" dir="ltr" placeholder="https://hook.eu2.make.com/…" value="${k.esc(n.sync?.url || '')}"></label>
-        <p class="note">${n.sync?.url ? `✓ כל רישום אוכל חדש נשלח גם ל־Notion${n.sync.last ? ` · נשלח לאחרונה ${new Date(n.sync.last).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}. עריכה או מחיקה אחרי השליחה לא מתעדכנות שם.<br><button class="btn sm" data-sync-today style="margin-top:6px">שליחת הרישומים של היום שעוד לא נשלחו</button>` : 'ריק = בלי Notion. רישומים ישנים לא נשלחים, רק מה שנרשם מעכשיו.'}</p>
+        <p class="note">${n.sync?.url ? `✓ כל רישום אוכל חדש נשלח גם ל־Notion${n.sync.last ? ` · נשלח לאחרונה ${new Date(n.sync.last).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}. עריכה או מחיקה אחרי השליחה לא מתעדכנות שם.<br><button class="btn sm" data-sync-today style="margin-top:6px">שליחת רישומי היום</button>` : 'ריק = בלי Notion. רישומים ישנים לא נשלחים, רק מה שנרשם מעכשיו.'}</p>
       </div></details>` : ''}
     </div>`;
 }

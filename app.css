@@ -539,3 +539,22 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 
 .nhead-btn{white-space:nowrap;display:inline-flex;align-items:center;gap:5px;color:var(--text);text-decoration:none}
 .nhead-btn svg{width:17px;height:17px}
+
+/* keep button labels on one line */
+.btn,.seg button,.chip{white-space:nowrap}
+.btn{overflow:hidden;text-overflow:ellipsis}
+.seg button{padding-inline:4px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:380px){.seg button{font-size:12.5px}}
+.today-food{overflow:hidden;width:100%}
+.today-food .nm .row{min-width:0}
+.today-food .nm-s{white-space:nowrap}
+/* home: nutrition half-card is narrow — ring on top, macros underneath at full width */
+.today-food .tf-row{flex-direction:column;align-items:stretch;gap:6px}
+.today-food .nring-wrap.sm{align-self:center}
+.today-food .tf-macros{width:100%}
+.today-food .tf-macros .row.between{gap:6px}
+.nring-wrap.sm{width:84px;height:84px}
+.nring-wrap.sm .nring{width:84px;height:84px}
+.nring-wrap.sm .nring circle{stroke-width:8}
+.today-food .nring .trk{stroke:var(--line)}
+.today-food .nbar{background:var(--line)}
