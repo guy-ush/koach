@@ -141,10 +141,11 @@ function render() {
   const view = document.getElementById('view');
   view.innerHTML = `
     <div class="top"><div><h1>תזונה</h1><p class="muted small">${showK() ? 'כוכבים · גרמים · קלוריות' : 'בכוכבים'}</p></div>
-      <div class="row" style="gap:6px">${n.claudeUrl ? `<a class="btn sm nhead-btn" href="${k.esc(n.claudeUrl)}" ${appLink(n.claudeUrl) ? '' : 'target="_blank" rel="noopener"'}>${ICO.cam} צילום</a>` : ''}<button class="btn sm nhead-btn" data-paste>📋 הדבקה</button></div></div>
+      <div class="row" style="gap:6px">${n.claudeUrl ? `<a class="btn sm nhead-btn" href="${k.esc(n.claudeUrl)}" ${appLink(n.claudeUrl) ? '' : 'target="_blank" rel="noopener"'}>${ICO.cam}</a>` : ''}<button class="btn sm nhead-btn" data-paste aria-label="הדבקה">📋</button><button class="btn sm nhead-btn primary" data-ask>💬 מאמן</button></div></div>
     <div class="seg" style="margin-bottom:14px">${[['day', 'יומן'], ['plan', 'יעדים'], ['stats', 'התקדמות'], ['weight', 'משקל']].map(([v, t]) => `<button data-sub="${v}" aria-pressed="${sub === v}">${t}</button>`).join('')}</div>
     <div id="nbody"></div>`;
   k.$('[data-paste]').onclick = () => pasteSheet(mealNow());
+  k.$('[data-ask]').onclick = () => askSheet();
   k.$$('[data-sub]').forEach(b => b.onclick = () => { sub = b.dataset.sub; render(); });
   ({ day: renderDay, plan: renderPlan, stats: renderStats, weight: renderWeight })[sub]();
 }
@@ -335,6 +336,78 @@ function amountSheet(f, meal, edit) {
   const del = k.$('[data-del]', s.el);
   if (del) del.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== edit.id); save(); s.close(); renderDay(); };
 }
+/* ---------- "the coach": ask about a food before eating it ----------
+   Instant part, in the app: matches from the food library and whether they fit what is left today.
+   Conversation part: the question plus today's numbers go to a Make webhook that asks Claude and
+   answers in plain text (with KOACH lines for the suggested portion, which can be added to the log). */
+function dayContext(date) {
+  const k = K(), es = entriesOn(date), tot = totals(es), tg = targetFor(date);
+  const left = MAC.map(([m, name]) => `${name} ${fmt(Math.max(0, r2((tg[m] || 0) - tot[m])))}${m === 'p' && tg.plus ? '+' : ''}`).join(' · ');
+  const meals = es.length ? es.map(e => `${e.meal}: ${e.name}`).join('; ') : 'עוד לא נרשם כלום';
+  return [`${k.fmtLong(date)} · ${isTrain(date) ? 'יום אימון' : 'יום מנוחה'}`,
+    `יעד היום (כוכבים): חלבון ${targetText('p', tg)} · שומן ${targetText('f', tg)} · פחמימה ${targetText('c', tg)}${tg.note ? ` (${tg.note})` : ''}`,
+    `נאכל עד עכשיו: חלבון ${fmt(tot.p)} · שומן ${fmt(tot.f)} · פחמימה ${fmt(tot.c)}`,
+    `נשאר: ${left}`, `מה נאכל היום: ${meals}`].join('\n');
+}
+function fitLine(f, tg, tot) {
+  const over = MAC.filter(([m]) => !(m === 'p' && tg.plus) && (f[m] || 0) > 0 && tot[m] + f[m] > (tg[m] || 0) + 0.01).map(([, name]) => name);
+  return over.length ? `<span class="fit no">חורג ב${over.join(' וב')}</span>` : `<span class="fit ok">נכנס ✓</span>`;
+}
+let askLog = [];
+function askSheet() {
+  const k = K(), n = N(), date = curDate || k.today(), url = n.coachAI?.url;
+  const s = k.sheet('💬 מאמן', `<div class="stack" style="gap:10px">
+      <div class="ask-left">${(() => { const tg = targetFor(date), tot = totals(entriesOn(date)); return `נשאר היום: ${MAC.map(([m, name]) => `<b>${name} ${fmt(Math.max(0, r2((tg[m] || 0) - tot[m])))}</b>`).join(' · ')}`; })()}</div>
+      <div id="ask-chat" class="ask-chat">${askLog.map(x => bubble(x)).join('')}</div>
+      <div id="ask-lib"></div>
+      ${url ? '' : '<p class="note">כדי לקבל תשובה מהמאמן צריך להדביק בהגדרות ← תזונה ← הגדרות מתקדמות את כתובת המאמן. בינתיים מוצגים מזונות מהמאגר והאם הם נכנסים.</p>'}
+    </div>`, `<div class="row" style="gap:8px"><input class="input grow" id="ask-q" placeholder="למשל: שניצל בפיתה, שווה?" autocomplete="off"><button class="btn primary" data-send>שאל</button></div>`);
+  s.el.classList.add('full');
+  const q = k.$('#ask-q', s.el), chat = k.$('#ask-chat', s.el);
+  const lib = () => {
+    const words = q.value.trim().split(/\s+/).filter(w => w.length > 1); const box = k.$('#ask-lib', s.el);
+    if (!words.length) { box.innerHTML = ''; return; }
+    const tg = targetFor(date), tot = totals(entriesOn(date));
+    const hits = library().filter(f => words.some(w => f.name.includes(w))).slice(0, 4);
+    box.innerHTML = hits.length ? `<div class="nsec">מהמאגר</div><div class="list">${hits.map(f => `<div class="li"><div class="grow"><div class="t">${k.esc(f.name)}</div><div class="s">${k.esc(f.serving || '')} · ${fitLine(f, tg, tot)}</div></div>${chips(f)}</div>`).join('')}</div>` : '';
+  };
+  q.oninput = lib;
+  const send = async () => {
+    const text = q.value.trim(); if (!text) return;
+    if (!url) return k.toast('צריך להגדיר את כתובת המאמן בהגדרות');
+    askLog.push({ who: 'me', text }); q.value = ''; lib();
+    chat.insertAdjacentHTML('beforeend', bubble({ who: 'me', text }) + '<div class="bub coach wait">המאמן חושב…</div>');
+    chat.lastElementChild.scrollIntoView({ block: 'end' });
+    const hist = askLog.slice(-7, -1).map(x => `${x.who === 'me' ? 'גיא' : 'מאמן'}: ${x.text.replace(/KOACH\|.*$/gm, '').trim()}`).join('\n');
+    try {
+      const r = await fetch(url, { method: 'POST', body: new URLSearchParams({ q: text, ctx: dayContext(date) + (hist ? `\n\nהשיחה עד עכשיו:\n${hist}` : '') }) });
+      const ans = (await r.text()).trim();
+      if (!r.ok || !ans || /^accepted$/i.test(ans)) throw new Error(ans || r.status);
+      const msg = { who: 'coach', text: ans }; askLog.push(msg);
+      chat.lastElementChild.outerHTML = bubble(msg);
+    } catch (e) {
+      console.warn('coach', e); askLog.pop(); chat.lastElementChild.outerHTML = '<div class="bub coach err">לא הצלחתי להגיע למאמן. בדוק חיבור לרשת ונסה שוב.</div>';
+    }
+    bindAdds(); chat.lastElementChild.scrollIntoView({ block: 'end' });
+  };
+  const bindAdds = () => k.$$('[data-askadd]', s.el).forEach(b => b.onclick = () => {
+    const items = parseKoach(askLog[+b.dataset.askadd]?.text || ''); if (!items.length) return;
+    const now = Date.now(), meal = mealNow();
+    items.forEach((e, i) => N().log.push({ id: k.uid(), date, meal, name: e.name, serving: e.serving, qty: 1, p: e.p, f: e.f, c: e.c, src: 'coach', at: now + i }));
+    save(); renderDay(); b.disabled = true; b.textContent = 'נוסף ליומן ✓'; k.toast(`נוסף ל${meal}`);
+  });
+  k.$('[data-send]', s.el).onclick = send;
+  q.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); send(); } };
+  bindAdds(); if (chat.lastElementChild) chat.lastElementChild.scrollIntoView({ block: 'end' });
+  setTimeout(() => q.focus(), 300);
+}
+function bubble(x) {
+  const k = K(), i = askLog.indexOf(x);
+  if (x.who === 'me') return `<div class="bub me">${k.esc(x.text)}</div>`;
+  const items = parseKoach(x.text), body = x.text.replace(/^.*KOACH\|.*$/gm, '').replace(/```/g, '').trim();
+  return `<div class="bub coach">${k.esc(body).replace(/\n/g, '<br>')}${items.length ? `<div class="bub-add">${items.map(e => `<span>${k.esc(e.name)} ${chips(e)}</span>`).join('')}<button class="btn sm" data-askadd="${i}">+ הוספה ליומן</button></div>` : ''}</div>`;
+}
+
 /* the whole day as plain text, to paste into a chat */
 function dayText(date) {
   const k = K(), n = N(), es = entriesOn(date), tot = totals(es), tg = targetFor(date);
@@ -800,6 +873,8 @@ function settingsHTML() {
         <label class="field"><span>ארוחות (מופרדות בפסיק)</span><input class="input" id="n-meals-in" value="${k.esc(n.meals.join(', '))}"></label>
         <label class="field"><span>קישור לשיחה ב־Claude (לצילום אוכל)</span><input class="input" id="n-claude" dir="ltr" placeholder="https://claude.ai/chat/…" value="${k.esc(n.claudeUrl || '')}"></label>
         <p class="note" id="n-claude-hint">${claudeHint(n.claudeUrl)}</p>
+        <label class="field"><span>💬 מאמן (כתובת Webhook של Make)</span><input class="input" id="n-coachai" dir="ltr" placeholder="https://hook.eu2.make.com/…" value="${k.esc(n.coachAI?.url || '')}"></label>
+        <p class="note">${n.coachAI?.url ? '✓ כפתור „💬 מאמן” בלשונית תזונה עונה על שאלות על מאכלים.' : 'ריק = המאמן מציג רק מזונות מהמאגר והאם הם נכנסים, בלי תשובה מ־Claude.'}</p>
         <label class="field"><span>שמירה גם ב־Notion (כתובת Webhook של Make)</span><input class="input" id="n-sync" dir="ltr" placeholder="https://hook.eu2.make.com/…" value="${k.esc(n.sync?.url || '')}"></label>
         <p class="note">${n.sync?.url ? `✓ כל רישום אוכל חדש נשלח גם ל־Notion${n.sync.last ? ` · נשלח לאחרונה ${new Date(n.sync.last).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}. עריכה או מחיקה אחרי השליחה לא מתעדכנות שם.<br><button class="btn sm" data-sync-today style="margin-top:6px">שליחת רישומי היום</button>` : 'ריק = בלי Notion. רישומים ישנים לא נשלחים, רק מה שנרשם מעכשיו.'}</p>
       </div></details>` : ''}
@@ -815,6 +890,7 @@ function bindSettings() {
   k.$$('[data-cday]').forEach(i => i.onchange = () => { const v = parseFloat(i.value); n[i.dataset.cday] = isNaN(v) ? null : v; save(); });
   k.$$('[data-gps]').forEach(i => i.onchange = () => { n.grams[i.dataset.gps] = Math.max(1, parseFloat(i.value) || n.grams[i.dataset.gps]); save(); hint(); });
   const mi = k.$('#n-meals-in'); if (mi) mi.onchange = () => { const m = mi.value.split(/[,،]/).map(x => x.trim()).filter(Boolean); n.meals = m.length ? m : DEFAULT_MEALS.slice(); save(); };
+  const ca = k.$('#n-coachai'); if (ca) ca.onchange = () => { const v = ca.value.trim(); if (v && !/^https:\/\/hook\.[a-z0-9.]*make\.com\//.test(v)) { k.toast('צריך כתובת Webhook של Make'); return; } n.coachAI = v ? { url: v } : null; save(); k.route(); if (v) k.toast('המאמן מחובר'); };
   const sy = k.$('#n-sync'); if (sy) sy.onchange = () => { const v = sy.value.trim(); if (v && !/^https:\/\/hook\.[a-z0-9.]*make\.com\//.test(v)) { k.toast('צריך כתובת Webhook של Make'); return; } n.sync = v ? { url: v, since: n.sync?.url === v ? n.sync.since : Date.now(), done: n.sync?.done || [] } : null; save(); k.route(); if (v) k.toast('מעכשיו כל רישום אוכל יישלח גם ל־Notion'); };
   const st2 = k.$('[data-sync-today]'); if (st2) st2.onclick = () => {
     const t0 = k.toDate(k.today()).getTime(), done = new Set(n.sync.done || []);

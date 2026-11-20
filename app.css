@@ -562,3 +562,21 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .sc-steps{margin:8px 0 0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.5}
 .sc-steps code{font-family:ui-monospace,monospace;font-size:12.5px;background:var(--surface-2);padding:0 4px;border-radius:4px;direction:ltr;unicode-bidi:isolate}
 .save-bar.flow{position:static}
+
+/* coach chat */
+.ask-left{font-size:13.5px;color:var(--muted);background:var(--surface-2);border-radius:12px;padding:8px 12px}
+.ask-left b{color:var(--text);font-weight:500}
+.ask-chat{display:flex;flex-direction:column;gap:8px}
+.ask-chat:empty{display:none}
+.bub{max-width:88%;padding:9px 12px;border-radius:16px;font-size:14.5px;line-height:1.5;white-space:normal}
+.bub.me{align-self:flex-end;background:var(--accent);color:#fff;border-end-end-radius:4px}
+.bub.coach{align-self:flex-start;background:var(--surface);box-shadow:var(--shadow);border-end-start-radius:4px}
+.bub.wait{color:var(--muted);animation:pulse 1.2s ease-in-out infinite}
+.bub.err{color:var(--over)}
+@keyframes pulse{50%{opacity:.45}}
+.bub-add{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.bub-add span{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:13px}
+.fit{font-size:12px}
+.fit.ok{color:var(--ok)}
+.fit.no{color:var(--over)}
+.nhead-btn.primary{background:var(--accent);color:#fff;border-color:transparent}
