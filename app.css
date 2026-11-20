@@ -580,3 +580,10 @@ body::before{content:"";position:fixed;z-index:0;pointer-events:none;left:50%;to
 .fit.ok{color:var(--ok)}
 .fit.no{color:var(--over)}
 .nhead-btn.primary{background:var(--accent);color:#fff;border-color:transparent}
+
+.tip-card{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:10px 12px 8px;margin-bottom:10px;border-inline-start:4px solid var(--accent)}
+.tip-h{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.tip-h b{font-weight:500;flex:1}
+.tip-h .icon-btn.sm{width:28px;height:28px;font-size:18px;line-height:1}
+.tip-t{font-size:14.5px;line-height:1.55}
+.tip-card .btn.ghost{margin-top:6px;padding-inline:0}

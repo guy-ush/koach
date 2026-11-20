@@ -25,7 +25,7 @@ function N() {
   if (!n.c25) { if (n.grams.c === 20) n.grams.c = 25; n.c25 = true; } // the coach's method: a carb star is 25 g
   return n;
 }
-const save = () => { K().save(); syncSoon(); };
+const save = () => { K().save(); syncSoon(); reactSoon(); };
 
 /* ---------- copy of every new food entry to Notion, through a Make webhook ----------
    The browser can't call the Notion API (CORS), so each new entry is posted as a simple form to a Make
@@ -160,6 +160,7 @@ function renderDay() {
       <button class="d" data-today>${dayLabel(curDate)}<small>${k.fmtDate(curDate)}</small></button>
       <button class="icon-btn" data-d="1" aria-label="יום הבא" style="transform:scaleX(-1)" ${curDate >= k.today() ? 'disabled' : ''}>${k.ICON.back}</button></div>
     <button class="daytype ${tr ? 'train' : ''}" data-daytype>${tr ? `${ICO.bar} יום אימון${woNames.length ? ` · ${k.esc(woNames.join(', '))}` : ''}` : 'יום מנוחה'}<small>${n.dayType[curDate] ? 'נקבע ידנית · ' : ''}לחץ לשינוי</small></button>
+    ${tipCard(curDate)}
     ${tg.src !== 'default' ? `<div class="plan-src">${tg.src === 'plan' ? '<b>יעד מהתוכנית</b>' : '<b>הערה מהתוכנית</b>'}${tg.note ? ` · ${k.esc(tg.note)}` : ''}</div>` : ''}
     <div class="card nsum">
       <div class="nring-wrap">${ring(eatK, tgK)}<div class="nring-val"><b class="num">${efmt(Math.abs(rem))}${showK() ? '' : ' ★'}</b><span>${rem >= 0 ? (showK() ? 'נשארו' : 'כוכבים נשארו') : 'מעל היעד'}</span><small><bdi dir="ltr">${efmt(eatK)} / ${efmt(tgK)}</bdi> ${showK() ? 'קק״ל' : 'סה״כ כוכבים'}</small></div></div>
@@ -181,6 +182,7 @@ function renderDay() {
   k.$$('[data-d]').forEach(b => b.onclick = () => { curDate = addDays(curDate, +b.dataset.d); renderDay(); });
   k.$('[data-today]').onclick = () => { curDate = k.today(); renderDay(); };
   const cd = k.$('[data-copyday]'); if (cd) cd.onclick = () => copyDay(curDate);
+  bindTip();
   k.$('[data-daytype]').onclick = () => {
     const auto = autoTrain(curDate), cur = isTrain(curDate), next = cur ? 'rest' : 'train';
     if ((next === 'train') === auto) delete n.dayType[curDate]; else n.dayType[curDate] = next;
@@ -336,6 +338,52 @@ function amountSheet(f, meal, edit) {
   const del = k.$('[data-del]', s.el);
   if (del) del.onclick = () => { const n = N(); n.log = n.log.filter(e => e.id !== edit.id); save(); s.close(); renderDay(); };
 }
+/* ---------- the coach reacts to what is logged ----------
+   A few seconds after new food is logged (any way: library, label, paste, coach), a short note appears
+   at the top of the day: first an instant one from simple rules, then, when the coach webhook is set,
+   one from Claude that looks at the whole day. One call per logging round, not per item. */
+let reactT = null;
+function reactSoon() { clearTimeout(reactT); reactT = setTimeout(() => { try { react(); } catch (e) {} }, 9000); }
+function ruleTip(date) {
+  const es = entriesOn(date), tot = totals(es), tg = targetFor(date), left = m => r2((tg[m] || 0) - tot[m]);
+  const h = new Date().getHours(), lines = [];
+  if (left('f') < -0.25) lines.push(`השומן עבר את היעד ב־${fmt(-left('f'))}. להמשך היום: חלבון רזה וירקות, בלי שמן ורטבים.`);
+  else if (left('f') <= 0.25) lines.push('השומן להיום כמעט סגור. מעכשיו לבחור רק דברים רזים.');
+  if (left('c') < -0.25) lines.push(`הפחמימה עברה את היעד ב־${fmt(-left('c'))}. בארוחות הבאות עדיף בלי לחם, אורז ופירות.`);
+  if (!(tg.plus) && left('p') < -0.5) lines.push('החלבון מעל היעד. זה פחות קריטי, אבל אפשר להוריד מנה בארוחה הבאה.');
+  if (left('p') >= 2 && h >= 15) lines.push(`חסרים עוד ${fmt(left('p'))} כוכבי חלבון וכבר אחר הצהריים. כדאי לשלב חלבון בכל ארוחה שנשארה.`);
+  if (!lines.length) lines.push(`בכיוון טוב. נשאר: חלבון ${fmt(Math.max(0, left('p')))} · שומן ${fmt(Math.max(0, left('f')))} · פחמימה ${fmt(Math.max(0, left('c')))}.`);
+  return lines.slice(0, 2).join(' ');
+}
+async function react() {
+  const n = N(), k = K(), d = k.today();
+  if (n.coachAuto === false) return;
+  const seen = new Set(n.coachSeen || []);
+  const fresh = entriesOn(d).filter(e => !seen.has(e.id) && (e.at || 0) > Date.now() - 3 * 3600e3 && e.src !== 'notion');
+  if (!fresh.length) return;
+  n.coachSeen = entriesOn(d).map(e => e.id); // remember what was already commented on (today only)
+  n.coachTip = { date: d, text: ruleTip(d), at: Date.now(), src: 'rules' }; K().save(); refreshTip();
+  const url = n.coachAI?.url; if (!url || !navigator.onLine) return;
+  try {
+    const q = `[עדכון] רשמתי עכשיו: ${fresh.map(e => `${e.name}${e.serving ? ` (${e.serving})` : ''}`).join(', ')}`;
+    const r = await fetch(url, { method: 'POST', body: new URLSearchParams({ q, ctx: dayContext(d) }) });
+    const t = (await r.text()).replace(/^.*KOACH\|.*$/gm, '').replace(/```/g, '').trim();
+    if (r.ok && t && !/^accepted$/i.test(t)) { n.coachTip = { date: d, text: t, at: Date.now(), src: 'ai' }; K().save(); refreshTip(); }
+  } catch (e) { /* the rule-based note stays */ }
+}
+function tipCard(date) {
+  const t = N().coachTip; if (!t || t.date !== date || t.hidden) return '<div id="tip-slot"></div>';
+  return `<div id="tip-slot"><div class="tip-card"><div class="tip-h"><b>💬 המאמן</b><span class="muted small">${new Date(t.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span><button class="icon-btn sm" data-tipx aria-label="סגירה">×</button></div><div class="tip-t">${K().esc(t.text).replace(/\n/g, '<br>')}</div><button class="btn sm ghost" data-tipask>להמשיך לשאול</button></div></div>`;
+}
+function bindTip() {
+  const x = K().$('[data-tipx]'); if (x) x.onclick = () => { N().coachTip.hidden = true; K().save(); refreshTip(); };
+  const a = K().$('[data-tipask]'); if (a) a.onclick = () => { const t = N().coachTip; if (t && !askLog.some(m => m.text === t.text)) askLog.push({ who: 'coach', text: t.text }); askSheet(); };
+}
+function refreshTip() {
+  const slot = document.getElementById('tip-slot'); if (!slot || location.hash !== '#/food') return;
+  slot.outerHTML = tipCard(curDate); bindTip();
+}
+
 /* ---------- "the coach": ask about a food before eating it ----------
    Instant part, in the app: matches from the food library and whether they fit what is left today.
    Conversation part: the question plus today's numbers go to a Make webhook that asks Claude and
@@ -874,6 +922,7 @@ function settingsHTML() {
         <label class="field"><span>קישור לשיחה ב־Claude (לצילום אוכל)</span><input class="input" id="n-claude" dir="ltr" placeholder="https://claude.ai/chat/…" value="${k.esc(n.claudeUrl || '')}"></label>
         <p class="note" id="n-claude-hint">${claudeHint(n.claudeUrl)}</p>
         <label class="field"><span>💬 מאמן (כתובת Webhook של Make)</span><input class="input" id="n-coachai" dir="ltr" placeholder="https://hook.eu2.make.com/…" value="${k.esc(n.coachAI?.url || '')}"></label>
+        <label class="row"><span class="grow">המאמן מגיב אחרי כל רישום<span class="muted small" style="display:block">הערה קצרה בראש היומן: מה זה אומר להמשך היום</span></span><span class="toggle"><input type="checkbox" id="n-coachauto" ${n.coachAuto !== false ? 'checked' : ''}><span></span></span></label>
         <p class="note">${n.coachAI?.url ? '✓ כפתור „💬 מאמן” בלשונית תזונה עונה על שאלות על מאכלים.' : 'ריק = המאמן מציג רק מזונות מהמאגר והאם הם נכנסים, בלי תשובה מ־Claude.'}</p>
         <label class="field"><span>שמירה גם ב־Notion (כתובת Webhook של Make)</span><input class="input" id="n-sync" dir="ltr" placeholder="https://hook.eu2.make.com/…" value="${k.esc(n.sync?.url || '')}"></label>
         <p class="note">${n.sync?.url ? `✓ כל רישום אוכל חדש נשלח גם ל־Notion${n.sync.last ? ` · נשלח לאחרונה ${new Date(n.sync.last).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}. עריכה או מחיקה אחרי השליחה לא מתעדכנות שם.<br><button class="btn sm" data-sync-today style="margin-top:6px">שליחת רישומי היום</button>` : 'ריק = בלי Notion. רישומים ישנים לא נשלחים, רק מה שנרשם מעכשיו.'}</p>
@@ -890,6 +939,7 @@ function bindSettings() {
   k.$$('[data-cday]').forEach(i => i.onchange = () => { const v = parseFloat(i.value); n[i.dataset.cday] = isNaN(v) ? null : v; save(); });
   k.$$('[data-gps]').forEach(i => i.onchange = () => { n.grams[i.dataset.gps] = Math.max(1, parseFloat(i.value) || n.grams[i.dataset.gps]); save(); hint(); });
   const mi = k.$('#n-meals-in'); if (mi) mi.onchange = () => { const m = mi.value.split(/[,،]/).map(x => x.trim()).filter(Boolean); n.meals = m.length ? m : DEFAULT_MEALS.slice(); save(); };
+  const cau = k.$('#n-coachauto'); if (cau) cau.onchange = () => { n.coachAuto = cau.checked; save(); };
   const ca = k.$('#n-coachai'); if (ca) ca.onchange = () => { const v = ca.value.trim(); if (v && !/^https:\/\/hook\.[a-z0-9.]*make\.com\//.test(v)) { k.toast('צריך כתובת Webhook של Make'); return; } n.coachAI = v ? { url: v } : null; save(); k.route(); if (v) k.toast('המאמן מחובר'); };
   const sy = k.$('#n-sync'); if (sy) sy.onchange = () => { const v = sy.value.trim(); if (v && !/^https:\/\/hook\.[a-z0-9.]*make\.com\//.test(v)) { k.toast('צריך כתובת Webhook של Make'); return; } n.sync = v ? { url: v, since: n.sync?.url === v ? n.sync.since : Date.now(), done: n.sync?.done || [] } : null; save(); k.route(); if (v) k.toast('מעכשיו כל רישום אוכל יישלח גם ל־Notion'); };
   const st2 = k.$('[data-sync-today]'); if (st2) st2.onclick = () => {
